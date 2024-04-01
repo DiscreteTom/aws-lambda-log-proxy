@@ -5,8 +5,7 @@ use tokio::{
   sync::Mutex,
 };
 
-#[tokio::main]
-async fn main() {
+pub async fn filter() {
   // build the handler process command, pipe stdout and stderr
   let mut command = Proxy::default_command();
   command.stdout(Stdio::piped()).stderr(Stdio::piped());
