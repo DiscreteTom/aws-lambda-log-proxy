@@ -32,7 +32,20 @@ impl Sink {
     Sink::new(tokio::io::stderr())
   }
 
-  // TODO: add fn lambda_telemetry_log_sink?
+  // #[cfg(target_os = "linux")]
+  // pub fn lambda_telemetry_log_sink() -> Result<Self, Error> {
+  //   std::env::var("_LAMBDA_TELEMETRY_LOG_FD")
+  //     .map_err(|e| Error::VarError(e))
+  //     .and_then(|fd| {
+  //       let fd = fd.parse().map_err(|e| Error::ParseIntError(e))?;
+  //       Ok(Sink::new(unsafe {
+  //         <tokio::fs::File as std::os::fd::FromRawFd>::from_raw_fd(fd)
+  //       }))
+  //     })
+
+  //   // TODO: use specific format to write,
+  //   // see https://github.com/aws/aws-lambda-nodejs-runtime-interface-client/blob/2ce88619fd176a5823bc5f38c5484d1cbdf95717/src/LogPatch.js#L90-L101
+  // }
 
   /// Write a buffer to the sink.
   pub async fn write_all(&self, buf: &[u8]) {
@@ -44,3 +57,8 @@ impl Sink {
     self.0.lock().await.flush().await.unwrap()
   }
 }
+
+// pub enum Error {
+//   VarError(std::env::VarError),
+//   ParseIntError(std::num::ParseIntError),
+// }
