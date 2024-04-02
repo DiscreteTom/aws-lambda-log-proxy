@@ -14,6 +14,8 @@ pub struct LogProxy {
   pub stdout: Option<Processor>,
   /// See [`Self::stderr`].
   pub stderr: Option<Processor>,
+  /// See [`Self::disable_lambda_telemetry_log_fd`].
+  pub disable_lambda_telemetry_log_fd: bool,
 }
 
 impl Default for LogProxy {
@@ -21,6 +23,7 @@ impl Default for LogProxy {
     LogProxy {
       stdout: None,
       stderr: None,
+      disable_lambda_telemetry_log_fd: false,
     }
   }
 }
@@ -54,6 +57,13 @@ impl LogProxy {
     self
   }
 
+  /// Remove the `_LAMBDA_TELEMETRY_LOG_FD` environment variable for the handler process
+  /// to prevent logs from being written to other file descriptors.
+  pub fn disable_lambda_telemetry_log_fd(mut self, disable: bool) -> Self {
+    self.disable_lambda_telemetry_log_fd = disable;
+    self
+  }
+
   /// Start the log proxy.
   /// This will block the current thread.
   pub async fn start(self) {
@@ -67,12 +77,7 @@ impl LogProxy {
       command.stderr(Stdio::piped());
     }
 
-    // disable `_LAMBDA_TELEMETRY_LOG_FD` to ensure logs are not written into other fd.
-    // this should be set especially for nodejs runtime
-    if std::env::var("AWS_LAMBDA_LOG_FILTER_DISABLE_LAMBDA_TELEMETRY_LOG_FD")
-      .map(|s| s == "true")
-      .unwrap_or(false)
-    {
+    if self.disable_lambda_telemetry_log_fd {
       command.env_remove("_LAMBDA_TELEMETRY_LOG_FD");
     }
 
