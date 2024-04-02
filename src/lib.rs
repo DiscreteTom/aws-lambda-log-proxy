@@ -52,6 +52,8 @@ impl LogProxy {
     self
   }
 
+  /// Start the log proxy.
+  /// This will block the current thread.
   pub async fn start(self) {
     let mut command = Proxy::default_command();
 
