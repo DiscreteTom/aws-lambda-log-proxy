@@ -1,5 +1,3 @@
-workspace = { members = ["aws-lambda-log-filter"] }
-
 [package]
 name = "aws-lambda-log-proxy"
 version = "0.1.0"
