@@ -41,9 +41,6 @@ impl Processor {
     self.ignore(move |line| !filter(line))
   }
 
-  // TODO: add wrap_json?
-  // TODO: add emf_only_filter?
-
   /// Set the sink for the processor.
   /// The default sink is [`tokio::io::stdout()`].
   pub fn sink(mut self, s: impl AsyncWrite + Send + Unpin + 'static) -> Self {
