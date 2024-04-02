@@ -4,7 +4,7 @@ use tokio::io::{AsyncWrite, AsyncWriteExt};
 /// and write them to [`Self::sink`].
 pub struct Processor {
   /// See [`Self::transformer`].
-  pub transformer: Box<dyn Fn(String) -> Option<String> + Send>,
+  pub transformer: Box<dyn FnMut(String) -> Option<String> + Send>,
   /// See [`Self::sink`].
   pub sink: Box<dyn AsyncWrite + Send + Unpin>,
 }
@@ -22,14 +22,14 @@ impl Processor {
   /// Set the log line transformer.
   /// If the transformer returns [`None`], the line will be ignored.
   /// The default transformer will return the input line as is.
-  pub fn transformer(mut self, t: impl Fn(String) -> Option<String> + Send + 'static) -> Self {
+  pub fn transformer(mut self, t: impl FnMut(String) -> Option<String> + Send + 'static) -> Self {
     self.transformer = Box::new(t);
     self
   }
 
   /// Set the transformer to a filter function.
   /// If the filter function returns true, the line will be ignored.
-  pub fn filter(self, filter: impl Fn(&str) -> bool + Send + 'static) -> Self {
+  pub fn filter(self, mut filter: impl FnMut(&str) -> bool + Send + 'static) -> Self {
     self.transformer(move |s| if filter(&s) { None } else { Some(s) })
   }
 
