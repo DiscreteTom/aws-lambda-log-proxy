@@ -28,9 +28,17 @@ impl Processor {
   }
 
   /// Set the transformer to a filter function.
-  /// If the filter function returns true, the line will be ignored.
-  pub fn filter(self, mut filter: impl FnMut(&str) -> bool + Send + 'static) -> Self {
+  /// If the filter function returns `true`, the line will be dropped,
+  /// otherwise it will be kept.
+  pub fn ignore(self, mut filter: impl FnMut(&str) -> bool + Send + 'static) -> Self {
     self.transformer(move |s| if filter(&s) { None } else { Some(s) })
+  }
+
+  /// Set the transformer to a filter function.
+  /// If the filter function returns `true`, the line will be kept,
+  /// otherwise it will be dropped.
+  pub fn filter(self, mut filter: impl FnMut(&str) -> bool + Send + 'static) -> Self {
+    self.ignore(move |line| !filter(line))
   }
 
   // TODO: add wrap_json?
