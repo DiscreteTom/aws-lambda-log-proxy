@@ -119,7 +119,7 @@ impl LogProxy {
         let line = lines.next_line().await.unwrap().unwrap();
 
         // lock the mutex to suppress the call to invocation/next
-        let _ = mutex.lock().await;
+        let _lock = mutex.lock().await;
 
         // process the first line
         processor.process(line).await;
