@@ -1,26 +1,50 @@
+mod processor;
+
+pub use processor::*;
+
 use aws_lambda_runtime_proxy::Proxy;
-use std::{future::Future, process::Stdio, sync::Arc};
+use std::{process::Stdio, sync::Arc};
 use tokio::{
   io::{self, AsyncBufReadExt, AsyncRead, BufReader},
   sync::Mutex,
 };
 
-pub struct LogProxy<StdoutProcessor, StderrProcessor> {
-  pub stdout_processor: StdoutProcessor,
-  pub stderr_processor: StderrProcessor,
+pub struct LogProxy {
+  stdout: Option<Processor>,
+  stderr: Option<Processor>,
 }
 
-impl<
-    StdoutProcessor: Fn(String) -> StdoutFut + Send + 'static,
-    StderrProcessor: Fn(String) -> StderrFut + Send + 'static,
-    StdoutFut: Future<Output = ()> + Send,
-    StderrFut: Future<Output = ()> + Send,
-  > LogProxy<StdoutProcessor, StderrProcessor>
-{
+impl Default for LogProxy {
+  fn default() -> Self {
+    LogProxy {
+      stdout: None,
+      stderr: None,
+    }
+  }
+}
+
+impl LogProxy {
+  /// Set the processor for stdout.
+  pub fn stdout(mut self, p: Processor) -> Self {
+    self.stdout = Some(p);
+    self
+  }
+  /// Set the processor for stderr.
+  pub fn stderr(mut self, p: Processor) -> Self {
+    self.stderr = Some(p);
+    self
+  }
+
   pub async fn start(self) {
-    // build the handler process command, pipe stdout and stderr
     let mut command = Proxy::default_command();
-    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+
+    // only pipe if there is a processor
+    if self.stdout.is_some() {
+      command.stdout(Stdio::piped());
+    }
+    if self.stderr.is_some() {
+      command.stderr(Stdio::piped());
+    }
 
     // disable `_LAMBDA_TELEMETRY_LOG_FD` to ensure logs are not written into other fd.
     // this should be set especially for nodejs runtime
@@ -36,16 +60,16 @@ impl<
     // create a mutex to ensure logs are written before the proxy call invocation/next
     let mutex = Arc::new(Mutex::new(()));
 
-    Self::spawn_reader(
-      proxy.handler.stdout.take().unwrap(),
-      &mutex,
-      self.stdout_processor,
-    );
-    Self::spawn_reader(
-      proxy.handler.stderr.take().unwrap(),
-      &mutex,
-      self.stderr_processor,
-    );
+    proxy
+      .handler
+      .stdout
+      .take()
+      .map(|file| Self::spawn_reader(file, &mutex, self.stdout.unwrap()));
+    proxy
+      .handler
+      .stderr
+      .take()
+      .map(|file| Self::spawn_reader(file, &mutex, self.stderr.unwrap()));
 
     let client = Mutex::new(proxy.client);
     proxy
@@ -60,17 +84,17 @@ impl<
       .await
   }
 
-  fn spawn_reader<T: AsyncRead + Send + 'static, Fut: Future<Output = ()> + Send>(
-    fd: T,
+  fn spawn_reader<T: AsyncRead + Send + 'static>(
+    file: T,
     mutex: &Arc<Mutex<()>>,
-    processor: impl Fn(String) -> Fut + Send + 'static,
+    mut processor: Processor,
   ) where
     BufReader<T>: Unpin,
   {
     let mutex = mutex.clone();
 
     tokio::spawn(async move {
-      let reader = io::BufReader::new(fd);
+      let reader = io::BufReader::new(file);
       let mut lines = reader.lines();
 
       loop {
@@ -81,13 +105,13 @@ impl<
         let _ = mutex.lock().await;
 
         // process the first line
-        processor(line).await;
+        processor.process(line).await;
 
         // check if there are more lines in the buffer
         while lines.get_ref().buffer().contains(/* '\n' */ &10) {
           // next line exists, process it
           let line = lines.next_line().await.unwrap().unwrap();
-          processor(line).await;
+          processor.process(line).await;
         }
 
         // now there is no more lines in the buffer, release the mutex
