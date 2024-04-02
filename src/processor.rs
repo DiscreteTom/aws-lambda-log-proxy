@@ -33,6 +33,7 @@ impl Processor {
     self.transformer(move |s| if filter(&s) { None } else { Some(s) })
   }
 
+  // TODO: add wrap_json?
   // TODO: add emf_only_filter?
 
   /// Set the sink for the processor.
