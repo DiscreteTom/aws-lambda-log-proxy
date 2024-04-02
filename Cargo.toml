@@ -2,6 +2,12 @@
 name = "aws-lambda-log-proxy"
 version = "0.1.0"
 edition = "2021"
+authors = ["DiscreteTom <discrete_tom@outlook.com>"]
+description = "Filter or transform logs from AWS Lambda functions before they are sent to CloudWatch Logs."
+repository = "https://github.com/DiscreteTom/aws-lambda-log-proxy"
+keywords = ["aws", "lambda", "cloudwatch", "log", "proxy"]
+license-file = "LICENSE"
+exclude = ["examples/*", "img/*", "rustfmt.toml", ".gitignore", "CHANGELOG.md"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
