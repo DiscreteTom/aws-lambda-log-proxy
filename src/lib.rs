@@ -25,13 +25,28 @@ impl Default for LogProxy {
 
 impl LogProxy {
   /// Set the processor for stdout.
-  pub fn stdout(mut self, p: Processor) -> Self {
-    self.stdout = Some(p);
+  /// By default there is no processor for stdout.
+  /// # Examples
+  /// ```
+  /// use aws_lambda_log_proxy::LogProxy;
+  ///
+  /// LogProxy::default().stdout(|p| p.filter(|line| line.starts_with("a")));
+  /// ```
+  pub fn stdout(mut self, decorator: impl FnOnce(Processor) -> Processor) -> Self {
+    self.stdout = Some(decorator(Processor::default()));
     self
   }
+
   /// Set the processor for stderr.
-  pub fn stderr(mut self, p: Processor) -> Self {
-    self.stderr = Some(p);
+  /// By default there is no processor for stderr.
+  /// # Examples
+  /// ```
+  /// use aws_lambda_log_proxy::LogProxy;
+  ///
+  /// LogProxy::default().stderr(|p| p.filter(|line| line.starts_with("a")));
+  /// ```
+  pub fn stderr(mut self, decorator: impl FnOnce(Processor) -> Processor) -> Self {
+    self.stderr = Some(decorator(Processor::default()));
     self
   }
 
