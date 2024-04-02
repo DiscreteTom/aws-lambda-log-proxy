@@ -1,6 +1,6 @@
 # AWS Lambda Log Proxy
 
-![Crates.io Version](https://img.shields.io/crates/v/aws-lambda-log-proxy?style=flat-square)
+[![Crates.io Version](https://img.shields.io/crates/v/aws-lambda-log-proxy?style=flat-square)](https://crates.io/crates/aws-lambda-log-proxy)
 ![license](https://img.shields.io/github/license/DiscreteTom/aws-lambda-log-proxy?style=flat-square)
 
 ![log-flow](./img/log-flow.png)
@@ -22,6 +22,12 @@ or run:
 ```bash
 cargo add aws-lambda-log-proxy
 ```
+
+### Examples
+
+WIP: an executable aws-lambda-log-filter is coming soon.
+
+### [Documentation](https://docs.rs/aws-lambda-log-proxy/0.1.0)
 
 ## Why We Need This?
 
