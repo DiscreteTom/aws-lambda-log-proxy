@@ -9,6 +9,7 @@ use tokio::{
   sync::Mutex,
 };
 
+#[derive(Default)]
 pub struct LogProxy {
   /// See [`Self::stdout`].
   pub stdout: Option<Processor>,
@@ -16,16 +17,6 @@ pub struct LogProxy {
   pub stderr: Option<Processor>,
   /// See [`Self::disable_lambda_telemetry_log_fd`].
   pub disable_lambda_telemetry_log_fd: bool,
-}
-
-impl Default for LogProxy {
-  fn default() -> Self {
-    LogProxy {
-      stdout: None,
-      stderr: None,
-      disable_lambda_telemetry_log_fd: false,
-    }
-  }
 }
 
 impl LogProxy {
