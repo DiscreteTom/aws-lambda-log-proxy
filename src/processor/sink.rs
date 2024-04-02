@@ -47,9 +47,11 @@ impl Sink {
   //   // see https://github.com/aws/aws-lambda-nodejs-runtime-interface-client/blob/2ce88619fd176a5823bc5f38c5484d1cbdf95717/src/LogPatch.js#L90-L101
   // }
 
-  /// Write a buffer to the sink.
-  pub async fn write_all(&self, buf: &[u8]) {
-    self.0.lock().await.write_all(buf).await.unwrap()
+  /// Write a string to the sink then write a newline(`'\n'`).
+  pub async fn write_line(&self, s: String) {
+    let mut f = self.0.lock().await;
+    f.write_all(s.as_bytes()).await.unwrap();
+    f.write_all(b"\n").await.unwrap();
   }
 
   /// Flush the sink.
