@@ -10,8 +10,10 @@ use tokio::{
 };
 
 pub struct LogProxy {
-  stdout: Option<Processor>,
-  stderr: Option<Processor>,
+  /// See [`Self::stdout`].
+  pub stdout: Option<Processor>,
+  /// See [`Self::stderr`].
+  pub stderr: Option<Processor>,
 }
 
 impl Default for LogProxy {
