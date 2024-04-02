@@ -26,29 +26,31 @@ impl Default for LogProxy {
 }
 
 impl LogProxy {
-  /// Set the processor for stdout.
-  /// By default there is no processor for stdout.
+  /// Set the processor for `stdout`.
+  /// By default there is no processor for `stdout`.
   /// # Examples
   /// ```
-  /// use aws_lambda_log_proxy::LogProxy;
+  /// use aws_lambda_log_proxy::{LogProxy, Sink};
   ///
-  /// LogProxy::default().stdout(|p| p.filter(|line| line.starts_with("a")));
+  /// let sink = Sink::stdout();
+  /// LogProxy::default().stdout(|p| p.sink(sink));
   /// ```
-  pub fn stdout(mut self, decorator: impl FnOnce(Processor) -> Processor) -> Self {
-    self.stdout = Some(decorator(Processor::default()));
+  pub fn stdout(mut self, builder: impl FnOnce(ProcessorBuilder) -> Processor) -> Self {
+    self.stdout = Some(builder(ProcessorBuilder::default()));
     self
   }
 
-  /// Set the processor for stderr.
-  /// By default there is no processor for stderr.
+  /// Set the processor for `stderr`.
+  /// By default there is no processor for `stderr`.
   /// # Examples
   /// ```
-  /// use aws_lambda_log_proxy::LogProxy;
+  /// use aws_lambda_log_proxy::{LogProxy, Sink};
   ///
-  /// LogProxy::default().stderr(|p| p.filter(|line| line.starts_with("a")));
+  /// let sink = Sink::stdout();
+  /// LogProxy::default().stderr(|p| p.sink(sink));
   /// ```
-  pub fn stderr(mut self, decorator: impl FnOnce(Processor) -> Processor) -> Self {
-    self.stderr = Some(decorator(Processor::default()));
+  pub fn stderr(mut self, builder: impl FnOnce(ProcessorBuilder) -> Processor) -> Self {
+    self.stderr = Some(builder(ProcessorBuilder::default()));
     self
   }
 
@@ -132,6 +134,9 @@ impl LogProxy {
           let line = lines.next_line().await.unwrap().unwrap();
           processor.process(line).await;
         }
+
+        // flush the processor since there is no more lines in the buffer
+        processor.flush().await;
 
         // now there is no more lines in the buffer, release the mutex
       }
