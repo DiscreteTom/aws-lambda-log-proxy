@@ -1,5 +1,5 @@
 [package]
-name = "aws-lambda-log-filter"
+name = "aws-lambda-log-proxy"
 version = "0.1.0"
 edition = "2021"
 
