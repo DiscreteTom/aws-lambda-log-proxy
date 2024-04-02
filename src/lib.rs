@@ -1,16 +1,22 @@
 use aws_lambda_runtime_proxy::Proxy;
-use std::{process::Stdio, sync::Arc};
+use std::{future::Future, process::Stdio, sync::Arc};
 use tokio::{
   io::{self, AsyncBufReadExt, AsyncRead, BufReader},
   sync::Mutex,
 };
 
-pub struct LogProxy {
-  pub stdout_processor: Box<dyn Fn(&str) + Send>,
-  pub stderr_processor: Box<dyn Fn(&str) + Send>,
+pub struct LogProxy<StdoutProcessor, StderrProcessor> {
+  pub stdout_processor: StdoutProcessor,
+  pub stderr_processor: StderrProcessor,
 }
 
-impl LogProxy {
+impl<
+    StdoutProcessor: Fn(String) -> StdoutFut + Send + 'static,
+    StderrProcessor: Fn(String) -> StderrFut + Send + 'static,
+    StdoutFut: Future<Output = ()> + Send,
+    StderrFut: Future<Output = ()> + Send,
+  > LogProxy<StdoutProcessor, StderrProcessor>
+{
   pub async fn start(self) {
     // build the handler process command, pipe stdout and stderr
     let mut command = Proxy::default_command();
@@ -54,10 +60,10 @@ impl LogProxy {
       .await
   }
 
-  fn spawn_reader<T: AsyncRead + Send + 'static>(
+  fn spawn_reader<T: AsyncRead + Send + 'static, Fut: Future<Output = ()> + Send>(
     fd: T,
     mutex: &Arc<Mutex<()>>,
-    processor: Box<dyn Fn(&str) + Send>,
+    processor: impl Fn(String) -> Fut + Send + 'static,
   ) where
     BufReader<T>: Unpin,
   {
@@ -75,11 +81,13 @@ impl LogProxy {
         let _ = mutex.lock().await;
 
         // process the first line
-        processor(&line);
+        processor(line).await;
 
         // check if there are more lines in the buffer
         while lines.get_ref().buffer().contains(/* '\n' */ &10) {
-          processor(&line);
+          // next line exists, process it
+          let line = lines.next_line().await.unwrap().unwrap();
+          processor(line).await;
         }
 
         // now there is no more lines in the buffer, release the mutex
