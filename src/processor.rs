@@ -67,3 +67,45 @@ impl Processor {
     }
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn default_transformer() {
+    let text = "test".to_string();
+    let mut processor = Processor::default();
+    let transformed = (processor.transformer)(text.clone());
+    // default transformer should return the input line as is
+    assert_eq!(transformed, Some(text));
+  }
+
+  #[test]
+  fn ignore_filter() {
+    let text = "test".to_string();
+    let mut processor = Processor::default().ignore(|_| true);
+    let transformed = (processor.transformer)(text.clone());
+    // ignore filter should return None
+    assert_eq!(transformed, None);
+
+    let mut processor = Processor::default().ignore(|_| false);
+    let transformed = (processor.transformer)(text.clone());
+    // ignore filter should return the input line as is
+    assert_eq!(transformed, Some(text));
+  }
+
+  #[test]
+  fn filter_filter() {
+    let text = "test".to_string();
+    let mut processor = Processor::default().filter(|_| false);
+    let transformed = (processor.transformer)(text.clone());
+    // filter filter should return None
+    assert_eq!(transformed, None);
+
+    let mut processor = Processor::default().filter(|_| true);
+    let transformed = (processor.transformer)(text.clone());
+    // filter filter should return the input line as is
+    assert_eq!(transformed, Some(text));
+  }
+}
