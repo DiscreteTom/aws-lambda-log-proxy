@@ -25,7 +25,7 @@ cargo add aws-lambda-log-proxy
 
 ### Examples
 
-WIP: an executable aws-lambda-log-filter is coming soon.
+See [AWS Lambda Log Filter](https://github.com/DiscreteTom/aws-lambda-log-filter).
 
 ### [Documentation](https://docs.rs/aws-lambda-log-proxy/0.1.0)
 
