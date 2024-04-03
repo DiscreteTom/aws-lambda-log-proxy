@@ -47,6 +47,8 @@ The processing of logs is done in a separate process asynchronously, so it won't
 
 However, if you do something cpu-intensive in the log processing, it may still affect the performance of the main handler process, since the proxy process and the handler process share the same CPU and memory resources. Increase the memory of the Lambda function may help in this case.
 
-TODO: benchmark
+## Known Issues
+
+In _very rare_ cases, the lambda returned but not all logs are processed. The remaining logs will be processed in the next invocation. This should not happen since we've already suppress the [`invocation/next`](https://docs.aws.amazon.com/lambda/latest/dg/runtimes-api.html#runtimes-api-next) request until all logs are processed. But if it does happen, please open an issue.
 
 ## [CHANGELOG](./CHANGELOG.md)
