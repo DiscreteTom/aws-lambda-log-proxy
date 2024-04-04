@@ -8,7 +8,7 @@ use tokio::{
 pub enum OutputFormat {
   /// For this variant, log lines are written as bytes and a newline (`'\n'`) will be appended.
   Standard,
-  /// For this variant, log lines are written using the telemetry log format.
+  /// For this variant, log lines will be appended with a newline (`'\n'`) and written using the telemetry log format.
   /// See https://github.com/aws/aws-lambda-nodejs-runtime-interface-client/blob/2ce88619fd176a5823bc5f38c5484d1cbdf95717/src/LogPatch.js#L90-L101.
   TelemetryLogFd,
 }
@@ -75,7 +75,7 @@ impl Sink {
         // TODO: what about the level mask?
         buf[0..4].copy_from_slice(&0xa55a0003u32.to_be_bytes());
         // the second 4 bytes are the length of the message
-        let len = s.len() as u32;
+        let len = s.len() as u32 + 1; // 1 for the last newline
         buf[4..8].copy_from_slice(&len.to_be_bytes());
         // the next 8 bytes are the UNIX timestamp of the message with microseconds precision.
         let timestamp = chrono::Utc::now().timestamp_micros();
@@ -83,6 +83,7 @@ impl Sink {
         // write the buffer
         f.write_all(&buf).await.unwrap();
         f.write_all(s.as_bytes()).await.unwrap();
+        f.write_all(b"\n").await.unwrap();
       }
     }
   }
