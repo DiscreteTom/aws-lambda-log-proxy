@@ -5,7 +5,7 @@ pub use processor::*;
 use aws_lambda_runtime_proxy::Proxy;
 use std::{process::Stdio, sync::Arc};
 use tokio::{
-  io::{self, AsyncBufReadExt, AsyncRead, BufReader},
+  io::{self, AsyncBufReadExt, AsyncRead, BufReader, Lines},
   sync::Mutex,
 };
 
@@ -81,12 +81,12 @@ impl LogProxy {
       .handler
       .stdout
       .take()
-      .map(|file| Self::spawn_reader(file, &mutex, self.stdout.unwrap()));
+      .map(|file| spawn_reader(file, &mutex, self.stdout.unwrap()));
     proxy
       .handler
       .stderr
       .take()
-      .map(|file| Self::spawn_reader(file, &mutex, self.stderr.unwrap()));
+      .map(|file| spawn_reader(file, &mutex, self.stderr.unwrap()));
 
     let client = Mutex::new(proxy.client);
     proxy
@@ -100,42 +100,49 @@ impl LogProxy {
       })
       .await
   }
+}
 
-  fn spawn_reader<T: AsyncRead + Send + 'static>(
-    file: T,
-    mutex: &Arc<Mutex<()>>,
-    mut processor: Processor,
-  ) where
-    BufReader<T>: Unpin,
-  {
-    let mutex = mutex.clone();
+fn spawn_reader<T: AsyncRead + Send + 'static>(
+  file: T,
+  mutex: &Arc<Mutex<()>>,
+  mut processor: Processor,
+) where
+  BufReader<T>: Unpin,
+{
+  let mutex = mutex.clone();
 
-    tokio::spawn(async move {
-      let reader = io::BufReader::new(file);
-      let mut lines = reader.lines();
+  tokio::spawn(async move {
+    let reader = io::BufReader::new(file);
+    let mut lines = reader.lines();
 
-      loop {
-        // wait until there is at least one line in the buffer
+    loop {
+      // wait until there is at least one line in the buffer
+      let line = lines.next_line().await.unwrap().unwrap();
+
+      // lock the mutex to suppress the call to invocation/next
+      let _lock = mutex.lock().await;
+
+      // process the first line
+      processor.process(line).await;
+
+      // check if there are more lines in the buffer
+      while has_newline_in_buffer(&mut lines) {
+        // next line exists, process it
         let line = lines.next_line().await.unwrap().unwrap();
-
-        // lock the mutex to suppress the call to invocation/next
-        let _lock = mutex.lock().await;
-
-        // process the first line
         processor.process(line).await;
-
-        // check if there are more lines in the buffer
-        while lines.get_ref().buffer().contains(/* '\n' */ &10) {
-          // next line exists, process it
-          let line = lines.next_line().await.unwrap().unwrap();
-          processor.process(line).await;
-        }
-
-        // flush the processor since there is no more lines in the buffer
-        processor.flush().await;
-
-        // now there is no more lines in the buffer, release the mutex
       }
-    });
-  }
+
+      // flush the processor since there is no more lines in the buffer
+      processor.flush().await;
+
+      // now there is no more lines in the buffer, release the mutex
+    }
+  });
+}
+
+fn has_newline_in_buffer<T: AsyncRead + Send + 'static>(lines: &mut Lines<BufReader<T>>) -> bool
+where
+  BufReader<T>: Unpin,
+{
+  lines.get_ref().buffer().contains(/* '\n' */ &10)
 }
