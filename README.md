@@ -23,9 +23,9 @@ or run:
 cargo add aws-lambda-log-proxy
 ```
 
-### Examples
+### [Examples](./examples)
 
-See [AWS Lambda Log Filter](https://github.com/DiscreteTom/aws-lambda-log-filter).
+A real world case: [AWS Lambda Log Filter](https://github.com/DiscreteTom/aws-lambda-log-filter).
 
 ### [Documentation](https://docs.rs/aws-lambda-log-proxy/0.1.0)
 
@@ -46,9 +46,5 @@ We use [AWS Lambda Runtime Proxy](https://github.com/DiscreteTom/aws-lambda-runt
 The processing of logs is done in a separate process asynchronously, so it won't block the main handler process. Besides, we only suppress the [`invocation/next`](https://docs.aws.amazon.com/lambda/latest/dg/runtimes-api.html#runtimes-api-next) request but not the [`invocation/response`](https://docs.aws.amazon.com/lambda/latest/dg/runtimes-api.html#runtimes-api-response) request, so the synchronous invocator like AWS API Gateway won't be blocked by the processing of logs.
 
 However, if you do something cpu-intensive in the log processing, it may still affect the performance of the main handler process, since the proxy process and the handler process share the same CPU and memory resources. Increase the memory of the Lambda function may help in this case.
-
-## Known Issues
-
-In _very rare_ cases, the lambda returned but not all logs are processed. The remaining logs will be processed in the next invocation. This should not happen since we've already suppress the [`invocation/next`](https://docs.aws.amazon.com/lambda/latest/dg/runtimes-api.html#runtimes-api-next) request until all logs are processed. But if it does happen, please open an issue.
 
 ## [CHANGELOG](./CHANGELOG.md)
