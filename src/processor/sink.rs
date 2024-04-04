@@ -93,6 +93,7 @@ impl Sink {
   }
 }
 
+#[derive(Debug)]
 pub enum Error {
   VarError(std::env::VarError),
   ParseIntError(std::num::ParseIntError),
