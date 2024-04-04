@@ -3,10 +3,10 @@ mod processor;
 pub use processor::*;
 
 use aws_lambda_runtime_proxy::Proxy;
-use std::{process::Stdio, sync::Arc};
+use std::process::Stdio;
 use tokio::{
   io::{self, AsyncBufReadExt, AsyncRead, BufReader, Lines},
-  sync::Mutex,
+  sync::{mpsc, oneshot, Mutex},
 };
 
 #[derive(Default)]
@@ -74,27 +74,33 @@ impl LogProxy {
 
     let mut proxy = Proxy::default().command(command).spawn().await;
 
-    // create a mutex to ensure logs are written before the proxy call invocation/next
-    let mutex = Arc::new(Mutex::new(()));
-
-    proxy
+    let stdout_checker_tx = proxy
       .handler
       .stdout
       .take()
-      .map(|file| spawn_reader(file, &mutex, self.stdout.unwrap()));
-    proxy
+      .map(|file| spawn_reader(file, self.stdout.unwrap()));
+    let stderr_checker_tx = proxy
       .handler
       .stderr
       .take()
-      .map(|file| spawn_reader(file, &mutex, self.stderr.unwrap()));
+      .map(|file| spawn_reader(file, self.stderr.unwrap()));
 
     let client = Mutex::new(proxy.client);
     proxy
       .server
       .serve(|req| async {
         if req.uri().path() == "/2018-06-01/runtime/invocation/next" {
-          // wait until there is no more lines in the buffer
-          let _ = mutex.lock().await;
+          // in lambda, send `invocation/next` will freeze current execution environment,
+          // unprocessed logs might be lost,
+          // so before proceeding, wait for the processors to finish processing the logs
+
+          // send checkers to reader threads
+          let stdout_ack_rx = send_checker(&stdout_checker_tx).await;
+          let stderr_ack_rx = send_checker(&stderr_checker_tx).await;
+
+          // wait for the all checkers to finish
+          wait_for_ack(stdout_ack_rx).await;
+          wait_for_ack(stderr_ack_rx).await;
         }
         client.lock().await.send_request(req).await
       })
@@ -104,40 +110,58 @@ impl LogProxy {
 
 fn spawn_reader<T: AsyncRead + Send + 'static>(
   file: T,
-  mutex: &Arc<Mutex<()>>,
   mut processor: Processor,
-) where
+) -> mpsc::Sender<oneshot::Sender<()>>
+where
   BufReader<T>: Unpin,
 {
-  let mutex = mutex.clone();
+  let (checker_tx, mut checker_rx) = mpsc::channel::<oneshot::Sender<()>>(1);
 
   tokio::spawn(async move {
     let reader = io::BufReader::new(file);
     let mut lines = reader.lines();
 
     loop {
-      // wait until there is at least one line in the buffer
-      let line = lines.next_line().await.unwrap().unwrap();
+      tokio::select! {
+        // wait until there is at least one line in the buffer
+        line = lines.next_line() => {
+          // process the first line
+          processor.process(line.unwrap().unwrap()).await;
 
-      // lock the mutex to suppress the call to invocation/next
-      let _lock = mutex.lock().await;
+          // check if there are more lines in the buffer
+          while has_newline_in_buffer(&mut lines) {
+            processor.process(lines.next_line().await.unwrap().unwrap()).await;
+          }
 
-      // process the first line
-      processor.process(line).await;
+          // flush the processor since there is no more lines in the buffer
+          processor.flush().await;
+        }
+        // the server thread requests to check if the processor has finished processing the logs.
+        // this is a fallback in case the server thread got `invocation/next` while
+        // there are just new lines not processed by the previous branch
+        ack_tx = checker_rx.recv() => {
+          let mut need_flush = false;
 
-      // check if there are more lines in the buffer
-      while has_newline_in_buffer(&mut lines) {
-        // next line exists, process it
-        let line = lines.next_line().await.unwrap().unwrap();
-        processor.process(line).await;
+          // check if there are lines in the buffer
+          while has_newline_in_buffer(&mut lines) {
+            // next line exists, process it
+            processor.process(lines.next_line().await.unwrap().unwrap()).await;
+            need_flush = true;
+          }
+
+          // flush the processor since there is no more lines in the buffer
+          if need_flush {
+            processor.flush().await;
+          }
+
+          // stop suppressing the server thread
+          ack_tx.unwrap().send(()).unwrap();
+        }
       }
-
-      // flush the processor since there is no more lines in the buffer
-      processor.flush().await;
-
-      // now there is no more lines in the buffer, release the mutex
     }
   });
+
+  checker_tx
 }
 
 fn has_newline_in_buffer<T: AsyncRead + Send + 'static>(lines: &mut Lines<BufReader<T>>) -> bool
@@ -145,4 +169,23 @@ where
   BufReader<T>: Unpin,
 {
   lines.get_ref().buffer().contains(/* '\n' */ &10)
+}
+
+async fn send_checker(
+  checker_tx: &Option<mpsc::Sender<oneshot::Sender<()>>>,
+) -> Option<oneshot::Receiver<()>> {
+  match checker_tx {
+    Some(checker_tx) => {
+      let (ack_tx, ack_rx) = oneshot::channel();
+      checker_tx.send(ack_tx).await.unwrap();
+      Some(ack_rx)
+    }
+    None => None,
+  }
+}
+
+async fn wait_for_ack(ack_rx: Option<oneshot::Receiver<()>>) {
+  if let Some(ack_rx) = ack_rx {
+    ack_rx.await.unwrap();
+  }
 }
