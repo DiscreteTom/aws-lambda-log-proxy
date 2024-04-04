@@ -31,12 +31,12 @@ impl Sink {
     Sink(Arc::new(Mutex::new(Box::new(s))), OutputFormat::Standard)
   }
 
-  /// Create a new `stdout` sink.
+  /// Create a new [`stdout`](tokio::io::stdout) sink.
   pub fn stdout() -> Self {
     Sink::new(tokio::io::stdout())
   }
 
-  /// Create a new `stderr` sink.
+  /// Create a new [`stderr`](tokio::io::stderr) sink.
   pub fn stderr() -> Self {
     Sink::new(tokio::io::stderr())
   }
@@ -48,6 +48,7 @@ impl Sink {
   }
 
   #[cfg(target_os = "linux")]
+  /// Create a new sink from the `_LAMBDA_TELEMETRY_LOG_FD` environment variable.
   pub fn lambda_telemetry_log_fd() -> Result<Self, Error> {
     std::env::var("_LAMBDA_TELEMETRY_LOG_FD")
       .map_err(|e| Error::VarError(e))
