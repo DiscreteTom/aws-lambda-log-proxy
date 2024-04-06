@@ -15,3 +15,6 @@ exclude = ["examples/*", "img/*", "rustfmt.toml", ".gitignore", "CHANGELOG.md"]
 aws-lambda-runtime-proxy = "0.1"
 tokio = { version = "1", features = ["full"] }
 chrono = "0.4.37"
+
+[dev-dependencies]
+tokio-test = "0.4.4"

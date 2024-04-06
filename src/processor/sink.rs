@@ -108,3 +108,75 @@ pub enum Error {
   VarError(std::env::VarError),
   ParseIntError(std::num::ParseIntError),
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_sink_new() {
+    let sink = Sink::new(tokio::io::stdout());
+    assert_eq!(sink.format, OutputFormat::Standard);
+  }
+
+  #[test]
+  fn test_sink_stdout() {
+    let sink = Sink::stdout();
+    assert_eq!(sink.format, OutputFormat::Standard);
+  }
+
+  #[test]
+  fn test_sink_stderr() {
+    let sink = Sink::stderr();
+    assert_eq!(sink.format, OutputFormat::Standard);
+  }
+
+  #[test]
+  fn test_sink_format() {
+    let sink = Sink::new(tokio::io::stdout()).format(OutputFormat::TelemetryLogFd);
+    assert_eq!(sink.format, OutputFormat::TelemetryLogFd);
+  }
+
+  #[cfg(target_os = "linux")]
+  #[test]
+  fn test_sink_lambda_telemetry_log_fd() {
+    std::env::set_var("_LAMBDA_TELEMETRY_LOG_FD", "1");
+    let sink = Sink::lambda_telemetry_log_fd().unwrap();
+    assert_eq!(sink.format, OutputFormat::TelemetryLogFd);
+    std::env::remove_var("_LAMBDA_TELEMETRY_LOG_FD");
+
+    // missing env var
+    let result = Sink::lambda_telemetry_log_fd();
+    assert!(matches!(result, Err(Error::VarError(_))));
+
+    // invalid fd
+    std::env::set_var("_LAMBDA_TELEMETRY_LOG_FD", "invalid");
+    let result = Sink::lambda_telemetry_log_fd();
+    assert!(matches!(result, Err(Error::ParseIntError(_))));
+    std::env::remove_var("_LAMBDA_TELEMETRY_LOG_FD");
+  }
+
+  #[tokio::test]
+  async fn test_sink_write_line() {
+    // standard format
+    Sink::new(
+      tokio_test::io::Builder::new()
+        .write(b"hello")
+        .write(b"\n")
+        .build(),
+    )
+    .write_line("hello".to_string())
+    .await;
+
+    // telemetry log format
+    let sink = Sink::new(
+      tokio_test::io::Builder::new()
+        .write(&[0xa5, 0x5a, 0x00, 0x03])
+        .write(&[0, 0, 0, 6]) // length is 6, 5 for "hello" and 1 for newline
+        .write(&[0, 0, 0, 0, 0, 0, 0, 0])
+        .build(),
+    )
+    .format(OutputFormat::TelemetryLogFd);
+    write_telemetry_log_fd_format_header(&mut sink.writer.lock().await, "hello", 0).await;
+  }
+}
