@@ -4,9 +4,10 @@ use tokio::{
   sync::Mutex,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum OutputFormat {
   /// For this variant, log lines are written as bytes and a newline (`'\n'`) will be appended.
+  #[default]
   Standard,
   /// For this variant, log lines will be appended with a newline (`'\n'`) and written using the telemetry log format.
   /// See https://github.com/aws/aws-lambda-nodejs-runtime-interface-client/blob/2ce88619fd176a5823bc5f38c5484d1cbdf95717/src/LogPatch.js#L90-L101.

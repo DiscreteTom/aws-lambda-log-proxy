@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## Next
+
+- Feat: implement `Default` for `OutputFormat`.
+
 ## v0.1.1
 
 - Feat: add `OutputFormat`, `Sink::format`, `Sink::lambda_telemetry_log_fd`.
