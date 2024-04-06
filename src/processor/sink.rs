@@ -21,7 +21,7 @@ pub enum OutputFormat {
 #[derive(Clone)]
 pub struct Sink {
   // use arc mutex to prevent interleaved output
-  writer: Arc<Mutex<Box<dyn AsyncWrite + Send + Unpin>>>,
+  writer: Arc<Mutex<dyn AsyncWrite + Send + Unpin>>,
   format: OutputFormat,
 }
 
@@ -29,7 +29,7 @@ impl Sink {
   /// Create a new [`Standard`](OutputFormat::Standard) sink from an [`AsyncWrite`] implementor.
   pub fn new(s: impl AsyncWrite + Send + Unpin + 'static) -> Self {
     Sink {
-      writer: Arc::new(Mutex::new(Box::new(s))),
+      writer: Arc::new(Mutex::new(s)),
       format: OutputFormat::Standard,
     }
   }
