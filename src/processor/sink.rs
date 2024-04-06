@@ -18,18 +18,20 @@ pub enum OutputFormat {
 /// # Caveats
 /// To prevent interleaved output, you should clone a sink
 /// instead of creating a new one if you want to write to the same sink.
-pub struct Sink(Arc<Mutex<Box<dyn AsyncWrite + Send + Unpin>>>, OutputFormat);
-
-impl Clone for Sink {
-  fn clone(&self) -> Self {
-    Sink(Arc::clone(&self.0), self.1.clone())
-  }
+#[derive(Clone)]
+pub struct Sink {
+  // use arc mutex to prevent interleaved output
+  writer: Arc<Mutex<Box<dyn AsyncWrite + Send + Unpin>>>,
+  format: OutputFormat,
 }
 
 impl Sink {
   /// Create a new [`Standard`](OutputFormat::Standard) sink from an [`AsyncWrite`] implementor.
   pub fn new(s: impl AsyncWrite + Send + Unpin + 'static) -> Self {
-    Sink(Arc::new(Mutex::new(Box::new(s))), OutputFormat::Standard)
+    Sink {
+      writer: Arc::new(Mutex::new(Box::new(s))),
+      format: OutputFormat::Standard,
+    }
   }
 
   /// Create a new [`stdout`](tokio::io::stdout) sink.
@@ -44,7 +46,7 @@ impl Sink {
 
   /// Set the output format of the sink.
   pub fn format(mut self, kind: OutputFormat) -> Self {
-    self.1 = kind;
+    self.format = kind;
     self
   }
 
@@ -64,8 +66,8 @@ impl Sink {
 
   /// Write a string to the sink then write a newline(`'\n'`).
   pub async fn write_line(&self, s: String) {
-    let mut f = self.0.lock().await;
-    match self.1 {
+    let mut f = self.writer.lock().await;
+    match self.format {
       OutputFormat::Standard => {
         f.write_all(s.as_bytes()).await.unwrap();
         f.write_all(b"\n").await.unwrap();
@@ -92,7 +94,7 @@ impl Sink {
 
   /// Flush the sink.
   pub async fn flush(&self) {
-    self.0.lock().await.flush().await.unwrap()
+    self.writer.lock().await.flush().await.unwrap()
   }
 }
 
