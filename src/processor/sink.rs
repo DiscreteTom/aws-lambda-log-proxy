@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use tokio::{
   io::{AsyncWrite, AsyncWriteExt},
-  sync::Mutex,
+  sync::{Mutex, MutexGuard},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -68,34 +68,39 @@ impl Sink {
   pub async fn write_line(&self, s: String) {
     let mut f = self.writer.lock().await;
     match self.format {
-      OutputFormat::Standard => {
-        f.write_all(s.as_bytes()).await.unwrap();
-        f.write_all(b"\n").await.unwrap();
-      }
+      OutputFormat::Standard => {}
       OutputFormat::TelemetryLogFd => {
-        // create a 16 bytes buffer to store type and length
-        let mut buf = [0; 16];
-        // the first 4 bytes are 0xa55a0003
-        // TODO: what about the level mask? See https://github.com/aws/aws-lambda-nodejs-runtime-interface-client/blob/2ce88619fd176a5823bc5f38c5484d1cbdf95717/src/LogPatch.js#L113
-        buf[0..4].copy_from_slice(&0xa55a0003u32.to_be_bytes());
-        // the second 4 bytes are the length of the message
-        let len = s.len() as u32 + 1; // 1 for the last newline
-        buf[4..8].copy_from_slice(&len.to_be_bytes());
-        // the next 8 bytes are the UNIX timestamp of the message with microseconds precision.
-        let timestamp = chrono::Utc::now().timestamp_micros();
-        buf[8..16].copy_from_slice(&timestamp.to_be_bytes());
-        // write the buffer
-        f.write_all(&buf).await.unwrap();
-        f.write_all(s.as_bytes()).await.unwrap();
-        f.write_all(b"\n").await.unwrap();
+        write_telemetry_log_fd_format_header(&mut f, &s, chrono::Utc::now().timestamp_micros())
+          .await
       }
     }
+    f.write_all(s.as_bytes()).await.unwrap();
+    f.write_all(b"\n").await.unwrap();
   }
 
   /// Flush the sink.
   pub async fn flush(&self) {
     self.writer.lock().await.flush().await.unwrap()
   }
+}
+
+async fn write_telemetry_log_fd_format_header<'a>(
+  f: &mut MutexGuard<'a, dyn AsyncWrite + Send + Unpin>,
+  s: &str,
+  timestamp: i64,
+) {
+  // create a 16 bytes buffer to store type and length
+  let mut buf = [0; 16];
+  // the first 4 bytes are 0xa55a0003
+  // TODO: what about the level mask? See https://github.com/aws/aws-lambda-nodejs-runtime-interface-client/blob/2ce88619fd176a5823bc5f38c5484d1cbdf95717/src/LogPatch.js#L113
+  buf[0..4].copy_from_slice(&0xa55a0003u32.to_be_bytes());
+  // the second 4 bytes are the length of the message
+  let len = s.len() as u32 + 1; // 1 for the last newline
+  buf[4..8].copy_from_slice(&len.to_be_bytes());
+  // the next 8 bytes are the UNIX timestamp of the message with microseconds precision.
+  buf[8..16].copy_from_slice(&timestamp.to_be_bytes());
+  // write the buffer
+  f.write_all(&buf).await.unwrap();
 }
 
 #[derive(Debug)]
