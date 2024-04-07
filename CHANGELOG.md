@@ -1,8 +1,10 @@
 # CHANGELOG
 
-## Next
+## v0.2.0
 
+- **_Breaking Change_**: rewrite `Sink`, use `SinkBuilder` to build `Sink` instances.
 - Feat: implement `Default` for `OutputFormat`.
+- Perf: apply actor pattern to `Sink` and add action buffers.
 
 ## v0.1.1
 

@@ -1,9 +1,9 @@
-use aws_lambda_log_proxy::{LogProxy, Sink};
+use aws_lambda_log_proxy::{LogProxy, SinkBuilder};
 
 #[tokio::main]
 async fn main() {
   // Create a sink to write log lines to stdout.
-  let sink = Sink::stdout();
+  let sink = SinkBuilder::default().stdout().build();
 
   LogProxy::default()
     .stdout(|processor| {

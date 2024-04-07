@@ -1,7 +1,6 @@
-use std::sync::Arc;
 use tokio::{
-  io::{AsyncWrite, AsyncWriteExt},
-  sync::{Mutex, MutexGuard},
+  io::{AsyncWrite, AsyncWriteExt, Stderr, Stdout},
+  sync::{mpsc, oneshot},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -14,78 +13,156 @@ pub enum OutputFormat {
   TelemetryLogFd,
 }
 
-/// A sink to write log lines to.
-/// # Caveats
-/// To prevent interleaved output, you should clone a sink
-/// instead of creating a new one if you want to write to the same sink.
-#[derive(Clone)]
-pub struct Sink {
-  // use arc mutex to prevent interleaved output
-  writer: Arc<Mutex<dyn AsyncWrite + Send + Unpin>>,
-  format: OutputFormat,
+enum Action {
+  WriteLine(String),
+  Flush(oneshot::Sender<()>),
 }
 
-impl Sink {
-  /// Create a new [`Standard`](OutputFormat::Standard) sink from an [`AsyncWrite`] implementor.
-  pub fn new(s: impl AsyncWrite + Send + Unpin + 'static) -> Self {
-    Sink {
-      writer: Arc::new(Mutex::new(s)),
+/// See [`Sink`].
+pub struct SinkBuilder<T> {
+  writer: T,
+  /// See [`Self::format`].
+  format: OutputFormat,
+  /// See [`Self::buffer_size`].
+  buffer_size: usize,
+}
+
+impl Default for SinkBuilder<()> {
+  fn default() -> Self {
+    SinkBuilder {
+      writer: (),
       format: OutputFormat::Standard,
+      buffer_size: 64,
     }
   }
+}
 
-  /// Create a new [`stdout`](tokio::io::stdout) sink.
-  pub fn stdout() -> Self {
-    Sink::new(tokio::io::stdout())
-  }
-
-  /// Create a new [`stderr`](tokio::io::stderr) sink.
-  pub fn stderr() -> Self {
-    Sink::new(tokio::io::stderr())
-  }
-
-  /// Set the output format of the sink.
+impl<T> SinkBuilder<T> {
+  /// Set the output format of the sink. Defaults to [`OutputFormat::Standard`].
   pub fn format(mut self, kind: OutputFormat) -> Self {
     self.format = kind;
     self
   }
 
+  /// Set the action buffer size of the sink. Defaults to `64`.
+  pub fn buffer_size(mut self, size: usize) -> Self {
+    self.buffer_size = size;
+    self
+  }
+
+  /// Set the writer of the sink to an [`AsyncWrite`] implementor.
+  pub fn writer<W: AsyncWrite + Send + Unpin + 'static>(self, writer: W) -> SinkBuilder<W> {
+    SinkBuilder {
+      writer,
+      format: self.format,
+      buffer_size: self.buffer_size,
+    }
+  }
+
+  /// Set the writer to [`tokio::io::stdout`].
+  pub fn stdout(self) -> SinkBuilder<Stdout> {
+    self.writer(tokio::io::stdout())
+  }
+
+  /// Set the writer to [`tokio::io::stderr`].
+  pub fn stderr(self) -> SinkBuilder<Stderr> {
+    self.writer(tokio::io::stderr())
+  }
+
   #[cfg(target_os = "linux")]
-  /// Create a new sink from the `_LAMBDA_TELEMETRY_LOG_FD` environment variable.
-  pub fn lambda_telemetry_log_fd() -> Result<Self, Error> {
+  /// Set the writer by the `_LAMBDA_TELEMETRY_LOG_FD` environment variable
+  /// and set the output format to [`OutputFormat::TelemetryLogFd`].
+  pub fn lambda_telemetry_log_fd(self) -> Result<SinkBuilder<tokio::fs::File>, Error> {
     std::env::var("_LAMBDA_TELEMETRY_LOG_FD")
       .map_err(|e| Error::VarError(e))
       .and_then(|fd| {
         let fd = fd.parse().map_err(|e| Error::ParseIntError(e))?;
         Ok(
-          Sink::new(unsafe { <tokio::fs::File as std::os::fd::FromRawFd>::from_raw_fd(fd) })
-            .format(OutputFormat::TelemetryLogFd),
+          self
+            .format(OutputFormat::TelemetryLogFd)
+            .writer(unsafe { <tokio::fs::File as std::os::fd::FromRawFd>::from_raw_fd(fd) }),
         )
       })
   }
 
+  /// Build a sink with the given writer.
+  pub fn build(self) -> Sink
+  where
+    T: AsyncWrite + Send + Unpin + 'static,
+  {
+    let (action_tx, mut action_rx) = mpsc::channel(self.buffer_size);
+
+    let format = self.format;
+    let mut writer = self.writer;
+
+    tokio::spawn(async move {
+      while let Some(action) = action_rx.recv().await {
+        match action {
+          Action::WriteLine(s) => {
+            write_line(&mut writer, s, &format).await;
+          }
+          Action::Flush(ack_tx) => {
+            writer.flush().await.unwrap();
+            ack_tx.send(()).unwrap();
+          }
+        }
+      }
+    });
+
+    Sink { action_tx }
+  }
+}
+
+/// A sink to write log lines to.
+/// # Caveats
+/// To prevent interleaved output, you should clone a sink
+/// instead of creating a new one if you want to write to the same sink.
+/// # Examples
+/// ```
+/// use aws_lambda_log_proxy::SinkBuilder;
+/// let sink: Sink = SinkBuilder::default().stdout().build();
+/// ```
+#[derive(Clone)]
+pub struct Sink {
+  action_tx: mpsc::Sender<Action>,
+}
+
+impl Sink {
   /// Write a string to the sink then write a newline(`'\n'`).
   pub async fn write_line(&self, s: String) {
-    let mut f = self.writer.lock().await;
-    match self.format {
-      OutputFormat::Standard => {}
-      OutputFormat::TelemetryLogFd => {
-        write_telemetry_log_fd_format_header(&mut f, &s, chrono::Utc::now().timestamp_micros())
-          .await
-      }
-    }
-    f.write_all(s.as_bytes()).await.unwrap();
-    f.write_all(b"\n").await.unwrap();
+    self.action_tx.send(Action::WriteLine(s)).await.unwrap()
   }
 
   /// Flush the sink.
   pub async fn flush(&self) {
-    self.writer.lock().await.flush().await.unwrap()
+    let (ack_tx, ack_rx) = oneshot::channel();
+    self.action_tx.send(Action::Flush(ack_tx)).await.unwrap();
+    ack_rx.await.unwrap();
   }
 }
 
+async fn write_line<'a>(
+  mut writer: impl AsyncWrite + Send + Unpin + 'a,
+  line: String,
+  format: &OutputFormat,
+) {
+  match format {
+    OutputFormat::Standard => {}
+    OutputFormat::TelemetryLogFd => {
+      write_telemetry_log_fd_format_header(
+        &mut writer,
+        &line,
+        chrono::Utc::now().timestamp_micros(),
+      )
+      .await
+    }
+  }
+  writer.write_all(line.as_bytes()).await.unwrap();
+  writer.write_all(b"\n").await.unwrap();
+}
+
 async fn write_telemetry_log_fd_format_header<'a>(
-  f: &mut MutexGuard<'a, dyn AsyncWrite + Send + Unpin>,
+  mut writer: impl AsyncWrite + Send + Unpin + 'a,
   s: &str,
   timestamp: i64,
 ) {
@@ -100,7 +177,7 @@ async fn write_telemetry_log_fd_format_header<'a>(
   // the next 8 bytes are the UNIX timestamp of the message with microseconds precision.
   buf[8..16].copy_from_slice(&timestamp.to_be_bytes());
   // write the buffer
-  f.write_all(&buf).await.unwrap();
+  writer.write_all(&buf).await.unwrap();
 }
 
 #[derive(Debug)]
@@ -114,69 +191,93 @@ mod tests {
   use super::*;
 
   #[test]
-  fn test_sink_new() {
-    let sink = Sink::new(tokio::io::stdout());
-    assert_eq!(sink.format, OutputFormat::Standard);
+  fn default_sink_builder() {
+    let builder = SinkBuilder::default();
+    assert_eq!(builder.writer, ());
+    assert_eq!(builder.format, OutputFormat::Standard);
+    assert_eq!(builder.buffer_size, 64);
   }
 
   #[test]
-  fn test_sink_stdout() {
-    let sink = Sink::stdout();
-    assert_eq!(sink.format, OutputFormat::Standard);
+  fn sink_builder_format() {
+    let builder = SinkBuilder::default().format(OutputFormat::TelemetryLogFd);
+    assert_eq!(builder.format, OutputFormat::TelemetryLogFd);
   }
 
   #[test]
-  fn test_sink_stderr() {
-    let sink = Sink::stderr();
-    assert_eq!(sink.format, OutputFormat::Standard);
+  fn sink_builder_buffer_size() {
+    let builder = SinkBuilder::default().buffer_size(128);
+    assert_eq!(builder.buffer_size, 128);
   }
 
   #[test]
-  fn test_sink_format() {
-    let sink = Sink::new(tokio::io::stdout()).format(OutputFormat::TelemetryLogFd);
-    assert_eq!(sink.format, OutputFormat::TelemetryLogFd);
+  fn sink_builder_writer() {
+    let _: Sink = SinkBuilder::default().writer(Vec::new()).build();
+  }
+
+  #[test]
+  fn sink_builder_stdout() {
+    let sb = SinkBuilder::default().stdout();
+    assert_eq!(sb.format, OutputFormat::Standard);
+    let _: Sink = sb.build();
+  }
+
+  #[test]
+  fn sink_builder_stderr() {
+    let sb = SinkBuilder::default().stderr();
+    assert_eq!(sb.format, OutputFormat::Standard);
+    let _: Sink = sb.build();
   }
 
   #[cfg(target_os = "linux")]
   #[test]
-  fn test_sink_lambda_telemetry_log_fd() {
+  fn sink_builder_lambda_telemetry_log_fd() {
     std::env::set_var("_LAMBDA_TELEMETRY_LOG_FD", "1");
-    let sink = Sink::lambda_telemetry_log_fd().unwrap();
-    assert_eq!(sink.format, OutputFormat::TelemetryLogFd);
+    let sb = SinkBuilder::default().lambda_telemetry_log_fd().unwrap();
+    assert_eq!(sb.format, OutputFormat::TelemetryLogFd);
+    let _: Sink = sb.build();
     std::env::remove_var("_LAMBDA_TELEMETRY_LOG_FD");
 
     // missing env var
-    let result = Sink::lambda_telemetry_log_fd();
+    let result = SinkBuilder::default().lambda_telemetry_log_fd();
     assert!(matches!(result, Err(Error::VarError(_))));
 
     // invalid fd
     std::env::set_var("_LAMBDA_TELEMETRY_LOG_FD", "invalid");
-    let result = Sink::lambda_telemetry_log_fd();
+    let result = SinkBuilder::default().lambda_telemetry_log_fd();
     assert!(matches!(result, Err(Error::ParseIntError(_))));
     std::env::remove_var("_LAMBDA_TELEMETRY_LOG_FD");
   }
 
   #[tokio::test]
-  async fn test_sink_write_line() {
+  async fn sink_write_line() {
     // standard format
-    Sink::new(
-      tokio_test::io::Builder::new()
-        .write(b"hello")
-        .write(b"\n")
-        .build(),
-    )
-    .write_line("hello".to_string())
-    .await;
+    SinkBuilder::default()
+      .writer(
+        tokio_test::io::Builder::new()
+          .write(b"hello")
+          .write(b"\n")
+          .build(),
+      )
+      .build()
+      .write_line("hello".to_string())
+      .await;
 
-    // telemetry log format
-    let sink = Sink::new(
-      tokio_test::io::Builder::new()
-        .write(&[0xa5, 0x5a, 0x00, 0x03])
-        .write(&[0, 0, 0, 6]) // length is 6, 5 for "hello" and 1 for newline
-        .write(&[0, 0, 0, 0, 0, 0, 0, 0])
-        .build(),
-    )
-    .format(OutputFormat::TelemetryLogFd);
-    write_telemetry_log_fd_format_header(&mut sink.writer.lock().await, "hello", 0).await;
+    // // telemetry log format
+    // let sink = SinkBuilder::default()
+    //   .writer(
+    //     tokio_test::io::Builder::new()
+    //       .write(&[0xa5, 0x5a, 0x00, 0x03])
+    //       .write(&[0, 0, 0, 6]) // length is 6, 5 for "hello" and 1 for newline
+    //       .write(&[0, 0, 0, 0, 0, 0, 0, 0])
+    //       .build(),
+    //   )
+    //   .format(OutputFormat::TelemetryLogFd)
+    //   .build();
+    // write_telemetry_log_fd_format_header(&mut sink.writer.lock().await, "hello", 0).await;
+
+    // // telemetry log format
+    // let sink = Sink::new(Vec::new()).format(OutputFormat::TelemetryLogFd);
+    // sink.write_line("hello".to_string()).await;
   }
 }

@@ -128,9 +128,14 @@ where
           // process the first line
           processor.process(line.unwrap().unwrap()).await;
 
-          // check if there are more lines in the buffer
-          while has_newline_in_buffer(&mut lines) {
-            processor.process(lines.next_line().await.unwrap().unwrap()).await;
+          lines.get_mut().fill_buf().await.unwrap();
+
+          // check if there are lines in the buffer
+          while let Some(index)= next_newline_index(&mut lines) {
+            // next line exists, process it
+            let line = String::from_utf8(lines.get_ref().buffer()[..index].to_vec()).expect("invalid utf-8");
+            lines.get_mut().consume(index + 1);
+            processor.process(line).await;
           }
 
           // flush the processor since there is no more lines in the buffer
@@ -143,9 +148,11 @@ where
           let mut need_flush = false;
 
           // check if there are lines in the buffer
-          while has_newline_in_buffer(&mut lines) {
+          while let Some(index)= next_newline_index(&mut lines) {
             // next line exists, process it
-            processor.process(lines.next_line().await.unwrap().unwrap()).await;
+            let line = String::from_utf8(lines.get_ref().buffer()[..index].to_vec()).expect("invalid utf-8");
+            lines.get_mut().consume(index + 1);
+            processor.process(line).await;
             need_flush = true;
           }
 
@@ -164,11 +171,18 @@ where
   checker_tx
 }
 
-fn has_newline_in_buffer<T: AsyncRead + Send + 'static>(lines: &mut Lines<BufReader<T>>) -> bool
+fn next_newline_index<T: AsyncRead + Send + 'static>(
+  lines: &mut Lines<BufReader<T>>,
+) -> Option<usize>
 where
   BufReader<T>: Unpin,
 {
-  lines.get_ref().buffer().contains(/* '\n' */ &10)
+  // TODO: check chars instead of bytes?
+  lines
+    .get_ref()
+    .buffer()
+    .iter()
+    .position(|&b| b == /* '\n' */ 10)
 }
 
 async fn send_checker(
@@ -204,7 +218,7 @@ mod tests {
 
   #[test]
   fn test_log_proxy_stdout() {
-    let sink = Sink::stdout();
+    let sink = SinkBuilder::default().stdout().build();
     let proxy = LogProxy::default().stdout(|p| p.sink(sink));
     assert!(proxy.stdout.is_some());
     assert!(proxy.stderr.is_none());
@@ -213,7 +227,7 @@ mod tests {
 
   #[test]
   fn test_log_proxy_stderr() {
-    let sink = Sink::stdout();
+    let sink = SinkBuilder::default().stdout().build();
     let proxy = LogProxy::default().stderr(|p| p.sink(sink));
     assert!(proxy.stdout.is_none());
     assert!(proxy.stderr.is_some());
@@ -232,14 +246,14 @@ mod tests {
   async fn test_has_newline_in_buffer() {
     let mut lines = BufReader::new("\nhello\nworld\n\n".as_bytes()).lines();
     lines.get_mut().fill_buf().await.unwrap();
-    assert!(has_newline_in_buffer(&mut lines));
+    assert_eq!(next_newline_index(&mut lines), Some(0));
     assert_eq!(lines.next_line().await.unwrap(), Some("".into()));
-    assert!(has_newline_in_buffer(&mut lines));
+    assert_eq!(next_newline_index(&mut lines), Some(6));
     assert_eq!(lines.next_line().await.unwrap(), Some("hello".into()));
-    assert!(has_newline_in_buffer(&mut lines));
+    assert_eq!(next_newline_index(&mut lines), Some(12));
     assert_eq!(lines.next_line().await.unwrap(), Some("world".into()));
-    assert!(has_newline_in_buffer(&mut lines));
+    assert_eq!(next_newline_index(&mut lines), Some(18));
     assert_eq!(lines.next_line().await.unwrap(), Some("".into()));
-    assert!(!has_newline_in_buffer(&mut lines));
+    assert_eq!(next_newline_index(&mut lines), None);
   }
 }
