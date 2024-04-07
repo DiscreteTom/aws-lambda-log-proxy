@@ -146,38 +146,33 @@ async fn write_line<'a>(
   line: String,
   format: &OutputFormat,
 ) {
+  let mut line = line.into_bytes();
+  line.push(b'\n');
+
   match format {
-    OutputFormat::Standard => {}
+    OutputFormat::Standard => {
+      writer.write_all(&line).await.unwrap();
+    }
     OutputFormat::TelemetryLogFd => {
-      write_telemetry_log_fd_format_header(
-        &mut writer,
-        &line,
-        chrono::Utc::now().timestamp_micros(),
-      )
-      .await
+      let mut content =
+        build_telemetry_log_fd_format_header(&line, chrono::Utc::now().timestamp_micros());
+      content.append(&mut line);
+      writer.write_all(&content).await.unwrap();
     }
   }
-  writer.write_all(line.as_bytes()).await.unwrap();
-  writer.write_all(b"\n").await.unwrap();
 }
 
-async fn write_telemetry_log_fd_format_header<'a>(
-  mut writer: impl AsyncWrite + Send + Unpin + 'a,
-  s: &str,
-  timestamp: i64,
-) {
+fn build_telemetry_log_fd_format_header(s: &[u8], timestamp: i64) -> Vec<u8> {
   // create a 16 bytes buffer to store type and length
-  let mut buf = [0; 16];
+  let mut buf = Vec::with_capacity(16);
   // the first 4 bytes are 0xa55a0003
   // TODO: what about the level mask? See https://github.com/aws/aws-lambda-nodejs-runtime-interface-client/blob/2ce88619fd176a5823bc5f38c5484d1cbdf95717/src/LogPatch.js#L113
   buf[0..4].copy_from_slice(&0xa55a0003u32.to_be_bytes());
   // the second 4 bytes are the length of the message
-  let len = s.len() as u32 + 1; // 1 for the last newline
-  buf[4..8].copy_from_slice(&len.to_be_bytes());
+  buf[4..8].copy_from_slice(&(s.len() as u32).to_be_bytes());
   // the next 8 bytes are the UNIX timestamp of the message with microseconds precision.
   buf[8..16].copy_from_slice(&timestamp.to_be_bytes());
-  // write the buffer
-  writer.write_all(&buf).await.unwrap();
+  buf
 }
 
 #[derive(Debug)]

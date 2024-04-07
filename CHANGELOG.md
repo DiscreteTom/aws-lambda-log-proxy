@@ -5,6 +5,7 @@
 - **_Breaking Change_**: rewrite `Sink`, use `SinkBuilder` to build `Sink` instances.
 - Feat: implement `Default` for `OutputFormat`.
 - Perf: apply actor pattern to `Sink` and add action buffers.
+- Perf: reduce async write calls.
 
 ## v0.1.1
 
