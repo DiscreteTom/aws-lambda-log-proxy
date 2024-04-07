@@ -142,7 +142,10 @@ where
           // check if there are lines in the buffer
           while let Some(index) = next_newline_index(&mut lines) {
             // next line exists, process it
-            let line = String::from_utf8(lines.get_ref().buffer()[..index].to_vec()).expect("invalid utf-8");
+            let mut line = String::from_utf8(lines.get_ref().buffer()[..index].to_vec()).expect("invalid utf-8");
+            if line.ends_with('\r') {
+              line.pop(); // remove '\r'
+            }
             lines.get_mut().consume(index + 1); // index + 1 is the count
             processor.process(line).await;
             need_flush = true;
