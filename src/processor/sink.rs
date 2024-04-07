@@ -85,9 +85,10 @@ impl<T> SinkBuilder<T> {
       })
   }
 
-  /// Build a sink with the given writer.
-  /// This will spawn a tokio task, so make sure there is a tokio runtime running.
-  pub fn build(self) -> Sink
+  /// Build a sink and spawn the writer task.
+  /// Make sure there is a tokio runtime running before calling this method.
+  /// The writer task will be terminated when the sink is dropped.
+  pub fn spawn(self) -> Sink
   where
     T: AsyncWrite + Send + Unpin + 'static,
   {
@@ -124,7 +125,7 @@ impl<T> SinkBuilder<T> {
 ///
 /// #[tokio::main]
 /// async fn main() {
-///   let sink: Sink = SinkBuilder::default().stdout().build();
+///   let sink: Sink = SinkBuilder::default().stdout().spawn();
 /// }
 /// ```
 #[derive(Clone)]
@@ -211,21 +212,21 @@ mod tests {
 
   #[tokio::test]
   async fn sink_builder_writer() {
-    let _: Sink = SinkBuilder::default().writer(Vec::new()).build();
+    let _: Sink = SinkBuilder::default().writer(Vec::new()).spawn();
   }
 
   #[tokio::test]
   async fn sink_builder_stdout() {
     let sb = SinkBuilder::default().stdout();
     assert_eq!(sb.format, OutputFormat::Standard);
-    let _: Sink = sb.build();
+    let _: Sink = sb.spawn();
   }
 
   #[tokio::test]
   async fn sink_builder_stderr() {
     let sb = SinkBuilder::default().stderr();
     assert_eq!(sb.format, OutputFormat::Standard);
-    let _: Sink = sb.build();
+    let _: Sink = sb.spawn();
   }
 
   #[cfg(target_os = "linux")]
@@ -234,7 +235,7 @@ mod tests {
     std::env::set_var("_LAMBDA_TELEMETRY_LOG_FD", "1");
     let sb = SinkBuilder::default().lambda_telemetry_log_fd().unwrap();
     assert_eq!(sb.format, OutputFormat::TelemetryLogFd);
-    let _: Sink = sb.build();
+    let _: Sink = sb.spawn();
     std::env::remove_var("_LAMBDA_TELEMETRY_LOG_FD");
 
     // missing env var
@@ -253,7 +254,7 @@ mod tests {
     // standard format
     SinkBuilder::default()
       .writer(tokio_test::io::Builder::new().write(b"hello\n").build())
-      .build()
+      .spawn()
       .write_line("hello".to_string())
       .await;
 

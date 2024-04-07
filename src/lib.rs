@@ -28,7 +28,7 @@ impl LogProxy {
   ///
   /// #[tokio::main]
   /// async fn main() {
-  ///   let sink = SinkBuilder::default().stdout().build();
+  ///   let sink = SinkBuilder::default().stdout().spawn();
   ///   LogProxy::default().stdout(|p| p.sink(sink));
   /// }
   /// ```
@@ -45,7 +45,7 @@ impl LogProxy {
   ///
   /// #[tokio::main]
   /// async fn main() {
-  ///   let sink = SinkBuilder::default().stdout().build();
+  ///   let sink = SinkBuilder::default().stdout().spawn();
   ///   LogProxy::default().stderr(|p| p.sink(sink));
   /// }
   /// ```
@@ -224,7 +224,7 @@ mod tests {
 
   #[tokio::test]
   async fn test_log_proxy_stdout() {
-    let sink = SinkBuilder::default().stdout().build();
+    let sink = SinkBuilder::default().stdout().spawn();
     let proxy = LogProxy::default().stdout(|p| p.sink(sink));
     assert!(proxy.stdout.is_some());
     assert!(proxy.stderr.is_none());
@@ -233,7 +233,7 @@ mod tests {
 
   #[tokio::test]
   async fn test_log_proxy_stderr() {
-    let sink = SinkBuilder::default().stdout().build();
+    let sink = SinkBuilder::default().stdout().spawn();
     let proxy = LogProxy::default().stderr(|p| p.sink(sink));
     assert!(proxy.stdout.is_none());
     assert!(proxy.stderr.is_some());

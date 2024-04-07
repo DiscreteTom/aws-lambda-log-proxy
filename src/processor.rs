@@ -42,7 +42,7 @@ mod tests {
           .write(b"\n")
           .build(),
       )
-      .build();
+      .spawn();
     let mut processor = ProcessorBuilder::default().sink(sink);
     processor.process("hello".to_string()).await;
   }
@@ -56,7 +56,7 @@ mod tests {
           .write(b"\n")
           .build(),
       )
-      .build();
+      .spawn();
     let mut processor = ProcessorBuilder::default()
       .ignore(|line| line == "world")
       .sink(sink);

@@ -3,7 +3,7 @@ use aws_lambda_log_proxy::{LogProxy, SinkBuilder};
 #[tokio::main]
 async fn main() {
   // Create a sink to write log lines to stdout.
-  let sink = SinkBuilder::default().stdout().build();
+  let sink = SinkBuilder::default().stdout().spawn();
 
   LogProxy::default()
     .stdout(|processor| {
