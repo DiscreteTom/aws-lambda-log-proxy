@@ -189,3 +189,57 @@ async fn wait_for_ack(ack_rx: Option<oneshot::Receiver<()>>) {
     ack_rx.await.unwrap();
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_log_proxy_default() {
+    let proxy = LogProxy::default();
+    assert!(proxy.stdout.is_none());
+    assert!(proxy.stderr.is_none());
+    assert!(!proxy.disable_lambda_telemetry_log_fd);
+  }
+
+  #[test]
+  fn test_log_proxy_stdout() {
+    let sink = Sink::stdout();
+    let proxy = LogProxy::default().stdout(|p| p.sink(sink));
+    assert!(proxy.stdout.is_some());
+    assert!(proxy.stderr.is_none());
+    assert!(!proxy.disable_lambda_telemetry_log_fd);
+  }
+
+  #[test]
+  fn test_log_proxy_stderr() {
+    let sink = Sink::stdout();
+    let proxy = LogProxy::default().stderr(|p| p.sink(sink));
+    assert!(proxy.stdout.is_none());
+    assert!(proxy.stderr.is_some());
+    assert!(!proxy.disable_lambda_telemetry_log_fd);
+  }
+
+  #[test]
+  fn test_log_proxy_disable_lambda_telemetry_log_fd() {
+    let proxy = LogProxy::default().disable_lambda_telemetry_log_fd(true);
+    assert!(proxy.stdout.is_none());
+    assert!(proxy.stderr.is_none());
+    assert!(proxy.disable_lambda_telemetry_log_fd);
+  }
+
+  #[tokio::test]
+  async fn test_has_newline_in_buffer() {
+    let mut lines = BufReader::new("\nhello\nworld\n\n".as_bytes()).lines();
+    lines.get_mut().fill_buf().await.unwrap();
+    assert!(has_newline_in_buffer(&mut lines));
+    assert_eq!(lines.next_line().await.unwrap(), Some("".into()));
+    assert!(has_newline_in_buffer(&mut lines));
+    assert_eq!(lines.next_line().await.unwrap(), Some("hello".into()));
+    assert!(has_newline_in_buffer(&mut lines));
+    assert_eq!(lines.next_line().await.unwrap(), Some("world".into()));
+    assert!(has_newline_in_buffer(&mut lines));
+    assert_eq!(lines.next_line().await.unwrap(), Some("".into()));
+    assert!(!has_newline_in_buffer(&mut lines));
+  }
+}
