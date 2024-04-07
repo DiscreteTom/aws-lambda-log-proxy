@@ -1,0 +1,31 @@
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: coverage
+    runs-on: ubuntu-latest
+    container:
+      image: xd009642/tarpaulin:develop-nightly
+      options: --security-opt seccomp=unconfined
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # use the default target
+      - run: rm .cargo/*
+
+      - name: Generate code coverage
+        env:
+          RUST_TEST_THREADS: 1
+        run: |
+          cargo +nightly tarpaulin --verbose --all-features --workspace --timeout 120 --out xml
+
+      - name: Upload to codecov.io
+        uses: codecov/codecov-action@v2
+        with:
+          # token: ${{secrets.CODECOV_TOKEN}} # not required for public repos
+          fail_ci_if_error: true
