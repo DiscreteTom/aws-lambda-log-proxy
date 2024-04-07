@@ -86,6 +86,7 @@ impl<T> SinkBuilder<T> {
   }
 
   /// Build a sink with the given writer.
+  /// This will spawn a tokio task, so make sure there is a tokio runtime running.
   pub fn build(self) -> Sink
   where
     T: AsyncWrite + Send + Unpin + 'static,
