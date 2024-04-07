@@ -24,10 +24,13 @@ impl LogProxy {
   /// By default there is no processor for `stdout`.
   /// # Examples
   /// ```
-  /// use aws_lambda_log_proxy::{LogProxy, Sink};
+  /// use aws_lambda_log_proxy::{LogProxy, SinkBuilder};
   ///
-  /// let sink = Sink::stdout();
-  /// LogProxy::default().stdout(|p| p.sink(sink));
+  /// #[tokio::main]
+  /// async fn main() {
+  ///   let sink = SinkBuilder::default().stdout().build();
+  ///   LogProxy::default().stdout(|p| p.sink(sink));
+  /// }
   /// ```
   pub fn stdout(mut self, builder: impl FnOnce(ProcessorBuilder) -> Processor) -> Self {
     self.stdout = Some(builder(ProcessorBuilder::default()));
@@ -38,10 +41,13 @@ impl LogProxy {
   /// By default there is no processor for `stderr`.
   /// # Examples
   /// ```
-  /// use aws_lambda_log_proxy::{LogProxy, Sink};
+  /// use aws_lambda_log_proxy::{LogProxy, SinkBuilder};
   ///
-  /// let sink = Sink::stdout();
-  /// LogProxy::default().stderr(|p| p.sink(sink));
+  /// #[tokio::main]
+  /// async fn main() {
+  ///   let sink = SinkBuilder::default().stdout().build();
+  ///   LogProxy::default().stderr(|p| p.sink(sink));
+  /// }
   /// ```
   pub fn stderr(mut self, builder: impl FnOnce(ProcessorBuilder) -> Processor) -> Self {
     self.stderr = Some(builder(ProcessorBuilder::default()));
@@ -216,8 +222,8 @@ mod tests {
     assert!(!proxy.disable_lambda_telemetry_log_fd);
   }
 
-  #[test]
-  fn test_log_proxy_stdout() {
+  #[tokio::test]
+  async fn test_log_proxy_stdout() {
     let sink = SinkBuilder::default().stdout().build();
     let proxy = LogProxy::default().stdout(|p| p.sink(sink));
     assert!(proxy.stdout.is_some());
@@ -225,8 +231,8 @@ mod tests {
     assert!(!proxy.disable_lambda_telemetry_log_fd);
   }
 
-  #[test]
-  fn test_log_proxy_stderr() {
+  #[tokio::test]
+  async fn test_log_proxy_stderr() {
     let sink = SinkBuilder::default().stdout().build();
     let proxy = LogProxy::default().stderr(|p| p.sink(sink));
     assert!(proxy.stdout.is_none());
@@ -248,11 +254,11 @@ mod tests {
     lines.get_mut().fill_buf().await.unwrap();
     assert_eq!(next_newline_index(&mut lines), Some(0));
     assert_eq!(lines.next_line().await.unwrap(), Some("".into()));
-    assert_eq!(next_newline_index(&mut lines), Some(6));
+    assert_eq!(next_newline_index(&mut lines), Some(5));
     assert_eq!(lines.next_line().await.unwrap(), Some("hello".into()));
-    assert_eq!(next_newline_index(&mut lines), Some(12));
+    assert_eq!(next_newline_index(&mut lines), Some(5));
     assert_eq!(lines.next_line().await.unwrap(), Some("world".into()));
-    assert_eq!(next_newline_index(&mut lines), Some(18));
+    assert_eq!(next_newline_index(&mut lines), Some(0));
     assert_eq!(lines.next_line().await.unwrap(), Some("".into()));
     assert_eq!(next_newline_index(&mut lines), None);
   }

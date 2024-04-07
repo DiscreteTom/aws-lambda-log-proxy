@@ -120,8 +120,12 @@ impl<T> SinkBuilder<T> {
 /// instead of creating a new one if you want to write to the same sink.
 /// # Examples
 /// ```
-/// use aws_lambda_log_proxy::SinkBuilder;
-/// let sink: Sink = SinkBuilder::default().stdout().build();
+/// use aws_lambda_log_proxy::{SinkBuilder, Sink};
+///
+/// #[tokio::main]
+/// async fn main() {
+///   let sink: Sink = SinkBuilder::default().stdout().build();
+/// }
 /// ```
 #[derive(Clone)]
 pub struct Sink {
@@ -205,28 +209,28 @@ mod tests {
     assert_eq!(builder.buffer_size, 128);
   }
 
-  #[test]
-  fn sink_builder_writer() {
+  #[tokio::test]
+  async fn sink_builder_writer() {
     let _: Sink = SinkBuilder::default().writer(Vec::new()).build();
   }
 
-  #[test]
-  fn sink_builder_stdout() {
+  #[tokio::test]
+  async fn sink_builder_stdout() {
     let sb = SinkBuilder::default().stdout();
     assert_eq!(sb.format, OutputFormat::Standard);
     let _: Sink = sb.build();
   }
 
-  #[test]
-  fn sink_builder_stderr() {
+  #[tokio::test]
+  async fn sink_builder_stderr() {
     let sb = SinkBuilder::default().stderr();
     assert_eq!(sb.format, OutputFormat::Standard);
     let _: Sink = sb.build();
   }
 
   #[cfg(target_os = "linux")]
-  #[test]
-  fn sink_builder_lambda_telemetry_log_fd() {
+  #[tokio::test]
+  async fn sink_builder_lambda_telemetry_log_fd() {
     std::env::set_var("_LAMBDA_TELEMETRY_LOG_FD", "1");
     let sb = SinkBuilder::default().lambda_telemetry_log_fd().unwrap();
     assert_eq!(sb.format, OutputFormat::TelemetryLogFd);
@@ -248,31 +252,15 @@ mod tests {
   async fn sink_write_line() {
     // standard format
     SinkBuilder::default()
-      .writer(
-        tokio_test::io::Builder::new()
-          .write(b"hello")
-          .write(b"\n")
-          .build(),
-      )
+      .writer(tokio_test::io::Builder::new().write(b"hello\n").build())
       .build()
       .write_line("hello".to_string())
       .await;
 
-    // // telemetry log format
-    // let sink = SinkBuilder::default()
-    //   .writer(
-    //     tokio_test::io::Builder::new()
-    //       .write(&[0xa5, 0x5a, 0x00, 0x03])
-    //       .write(&[0, 0, 0, 6]) // length is 6, 5 for "hello" and 1 for newline
-    //       .write(&[0, 0, 0, 0, 0, 0, 0, 0])
-    //       .build(),
-    //   )
-    //   .format(OutputFormat::TelemetryLogFd)
-    //   .build();
-    // write_telemetry_log_fd_format_header(&mut sink.writer.lock().await, "hello", 0).await;
-
-    // // telemetry log format
-    // let sink = Sink::new(Vec::new()).format(OutputFormat::TelemetryLogFd);
-    // sink.write_line("hello".to_string()).await;
+    // telemetry log format header
+    assert_eq!(
+      build_telemetry_log_fd_format_header("hello\n".as_bytes(), 0),
+      &[0xa5, 0x5a, 0x00, 0x03, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 0]
+    );
   }
 }
