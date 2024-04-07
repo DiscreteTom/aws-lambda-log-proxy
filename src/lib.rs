@@ -132,7 +132,12 @@ where
       tokio::select! {
         // wait until there is at least one line in the buffer
         line = lines.next_line() => {
-          processor.process(line.unwrap().unwrap()).await;
+          let line = line.unwrap().unwrap();
+          // `next_line` already removes '\n' and '\r', so we only need to check if the line is empty
+          if line.is_empty() {
+            continue;
+          }
+          processor.process(line).await;
           need_flush = true;
         }
         // the server thread requests to check if the processor has finished processing the logs.
