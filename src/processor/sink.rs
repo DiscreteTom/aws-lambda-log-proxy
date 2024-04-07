@@ -14,7 +14,7 @@ pub enum OutputFormat {
 }
 
 enum Action {
-  WriteLine(String),
+  WriteLine(Vec<u8>),
   Flush(oneshot::Sender<()>),
 }
 
@@ -99,8 +99,8 @@ impl<T> SinkBuilder<T> {
     tokio::spawn(async move {
       while let Some(action) = action_rx.recv().await {
         match action {
-          Action::WriteLine(s) => {
-            write_line(&mut writer, s, &format).await;
+          Action::WriteLine(line) => {
+            write_line(&mut writer, line, &format).await;
           }
           Action::Flush(ack_tx) => {
             writer.flush().await.unwrap();
@@ -131,7 +131,9 @@ pub struct Sink {
 impl Sink {
   /// Write a string to the sink then write a newline(`'\n'`).
   pub async fn write_line(&self, s: String) {
-    self.action_tx.send(Action::WriteLine(s)).await.unwrap()
+    let mut line = s.into_bytes();
+    line.push(b'\n');
+    self.action_tx.send(Action::WriteLine(line)).await.unwrap()
   }
 
   /// Flush the sink.
@@ -144,12 +146,9 @@ impl Sink {
 
 async fn write_line<'a>(
   mut writer: impl AsyncWrite + Send + Unpin + 'a,
-  line: String,
+  mut line: Vec<u8>,
   format: &OutputFormat,
 ) {
-  let mut line = line.into_bytes();
-  line.push(b'\n');
-
   match format {
     OutputFormat::Standard => {
       writer.write_all(&line).await.unwrap();
@@ -163,14 +162,14 @@ async fn write_line<'a>(
   }
 }
 
-fn build_telemetry_log_fd_format_header(s: &[u8], timestamp: i64) -> Vec<u8> {
+fn build_telemetry_log_fd_format_header(line: &[u8], timestamp: i64) -> Vec<u8> {
   // create a 16 bytes buffer to store type and length
   let mut buf = vec![0; 16];
   // the first 4 bytes are 0xa55a0003
   // TODO: what about the level mask? See https://github.com/aws/aws-lambda-nodejs-runtime-interface-client/blob/2ce88619fd176a5823bc5f38c5484d1cbdf95717/src/LogPatch.js#L113
   buf[0..4].copy_from_slice(&0xa55a0003u32.to_be_bytes());
   // the second 4 bytes are the length of the message
-  buf[4..8].copy_from_slice(&(s.len() as u32).to_be_bytes());
+  buf[4..8].copy_from_slice(&(line.len() as u32).to_be_bytes());
   // the next 8 bytes are the UNIX timestamp of the message with microseconds precision.
   buf[8..16].copy_from_slice(&timestamp.to_be_bytes());
   buf
