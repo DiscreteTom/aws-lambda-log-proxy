@@ -165,7 +165,7 @@ async fn write_line<'a>(
 
 fn build_telemetry_log_fd_format_header(s: &[u8], timestamp: i64) -> Vec<u8> {
   // create a 16 bytes buffer to store type and length
-  let mut buf = Vec::with_capacity(16);
+  let mut buf = vec![0; 16];
   // the first 4 bytes are 0xa55a0003
   // TODO: what about the level mask? See https://github.com/aws/aws-lambda-nodejs-runtime-interface-client/blob/2ce88619fd176a5823bc5f38c5484d1cbdf95717/src/LogPatch.js#L113
   buf[0..4].copy_from_slice(&0xa55a0003u32.to_be_bytes());
