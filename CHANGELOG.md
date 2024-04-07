@@ -6,6 +6,7 @@
 - Feat: implement `Default` for `OutputFormat`.
 - Perf: apply actor pattern to `Sink` and add action buffers.
 - Perf: reduce async write calls.
+- Perf: reduce async flush calls.
 
 ## v0.1.1
 

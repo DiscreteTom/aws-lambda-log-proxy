@@ -127,44 +127,31 @@ where
     let reader = BufReader::new(file);
     let mut lines = reader.lines();
 
+    let mut need_flush = false;
     loop {
       tokio::select! {
         // wait until there is at least one line in the buffer
         line = lines.next_line() => {
-          // process the first line
           processor.process(line.unwrap().unwrap()).await;
-
-          lines.get_mut().fill_buf().await.unwrap();
-
-          // check if there are lines in the buffer
-          while let Some(index)= next_newline_index(&mut lines) {
-            // next line exists, process it
-            let line = String::from_utf8(lines.get_ref().buffer()[..index].to_vec()).expect("invalid utf-8");
-            lines.get_mut().consume(index + 1);
-            processor.process(line).await;
-          }
-
-          // flush the processor since there is no more lines in the buffer
-          processor.flush().await;
+          need_flush = true;
         }
         // the server thread requests to check if the processor has finished processing the logs.
         // this is a fallback in case the server thread got `invocation/next` while
         // there are just new lines not processed by the previous branch
         ack_tx = checker_rx.recv() => {
-          let mut need_flush = false;
-
           // check if there are lines in the buffer
-          while let Some(index)= next_newline_index(&mut lines) {
+          while let Some(index) = next_newline_index(&mut lines) {
             // next line exists, process it
             let line = String::from_utf8(lines.get_ref().buffer()[..index].to_vec()).expect("invalid utf-8");
-            lines.get_mut().consume(index + 1);
+            lines.get_mut().consume(index + 1); // index + 1 is the count
             processor.process(line).await;
             need_flush = true;
           }
 
-          // flush the processor since there is no more lines in the buffer
+          // flush the processor since the execution environment might be frozen
           if need_flush {
             processor.flush().await;
+            need_flush = false;
           }
 
           // stop suppressing the server thread
@@ -183,12 +170,8 @@ fn next_newline_index<T: AsyncRead + Send + 'static>(
 where
   BufReader<T>: Unpin,
 {
-  // TODO: check chars instead of bytes?
-  lines
-    .get_ref()
-    .buffer()
-    .iter()
-    .position(|&b| b == /* '\n' */ 10)
+  // TODO: check by char instead of by byte?
+  lines.get_ref().buffer().iter().position(|&b| b == b'\n')
 }
 
 async fn send_checker(
