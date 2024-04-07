@@ -5,7 +5,7 @@ pub use processor::*;
 use aws_lambda_runtime_proxy::Proxy;
 use std::process::Stdio;
 use tokio::{
-  io::{self, AsyncBufReadExt, AsyncRead, BufReader, Lines},
+  io::{AsyncBufReadExt, AsyncRead, BufReader, Lines},
   sync::{mpsc, oneshot, Mutex},
 };
 
@@ -118,7 +118,7 @@ where
   let (checker_tx, mut checker_rx) = mpsc::channel::<oneshot::Sender<()>>(1);
 
   tokio::spawn(async move {
-    let reader = io::BufReader::new(file);
+    let reader = BufReader::new(file);
     let mut lines = reader.lines();
 
     loop {
