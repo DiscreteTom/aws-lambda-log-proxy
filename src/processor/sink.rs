@@ -101,7 +101,7 @@ impl<T> SinkBuilder<T> {
       while let Some(action) = action_rx.recv().await {
         match action {
           Action::WriteLine(line) => {
-            write_line(&mut writer, line, &format).await;
+            writer.write_all(&line).await.unwrap();
           }
           Action::Flush(ack_tx) => {
             writer.flush().await.unwrap();
@@ -111,7 +111,7 @@ impl<T> SinkBuilder<T> {
       }
     });
 
-    Sink { action_tx }
+    Sink { action_tx, format }
   }
 }
 
@@ -131,14 +131,27 @@ impl<T> SinkBuilder<T> {
 #[derive(Clone)]
 pub struct Sink {
   action_tx: mpsc::Sender<Action>,
+  format: OutputFormat,
 }
 
 impl Sink {
-  /// Write a string to the sink then write a newline(`'\n'`).
+  /// Write a string to the sink with a newline(`'\n'`) appended.
   pub async fn write_line(&self, s: String) {
     let mut line = s.into_bytes();
     line.push(b'\n');
-    self.action_tx.send(Action::WriteLine(line)).await.unwrap()
+    match self.format {
+      OutputFormat::Standard => self.action_tx.send(Action::WriteLine(line)).await.unwrap(),
+      OutputFormat::TelemetryLogFd => {
+        let mut content =
+          build_telemetry_log_fd_format_header(&line, chrono::Utc::now().timestamp_micros());
+        content.append(&mut line);
+        self
+          .action_tx
+          .send(Action::WriteLine(content))
+          .await
+          .unwrap()
+      }
+    }
   }
 
   /// Flush the sink. Wait until all buffered data is written to the underlying writer.
@@ -146,24 +159,6 @@ impl Sink {
     let (ack_tx, ack_rx) = oneshot::channel();
     self.action_tx.send(Action::Flush(ack_tx)).await.unwrap();
     ack_rx.await.unwrap();
-  }
-}
-
-async fn write_line<'a>(
-  mut writer: impl AsyncWrite + Send + Unpin + 'a,
-  mut line: Vec<u8>,
-  format: &OutputFormat,
-) {
-  match format {
-    OutputFormat::Standard => {
-      writer.write_all(&line).await.unwrap();
-    }
-    OutputFormat::TelemetryLogFd => {
-      let mut content =
-        build_telemetry_log_fd_format_header(&line, chrono::Utc::now().timestamp_micros());
-      content.append(&mut line);
-      writer.write_all(&content).await.unwrap();
-    }
   }
 }
 
