@@ -24,13 +24,10 @@ impl LogProxy {
   /// By default there is no processor for `stdout`.
   /// # Examples
   /// ```
-  /// use aws_lambda_log_proxy::{LogProxy, SinkBuilder};
+  /// use aws_lambda_log_proxy::{LogProxy, Sink};
   ///
-  /// #[tokio::main]
-  /// async fn main() {
-  ///   let sink = SinkBuilder::default().stdout().spawn();
-  ///   LogProxy::default().stdout(|p| p.sink(sink));
-  /// }
+  /// let sink = Sink::stdout();
+  /// LogProxy::default().stdout(|p| p.sink(sink));
   /// ```
   pub fn stdout(mut self, builder: impl FnOnce(ProcessorBuilder) -> Processor) -> Self {
     self.stdout = Some(builder(ProcessorBuilder::default()));
@@ -41,13 +38,10 @@ impl LogProxy {
   /// By default there is no processor for `stderr`.
   /// # Examples
   /// ```
-  /// use aws_lambda_log_proxy::{LogProxy, SinkBuilder};
+  /// use aws_lambda_log_proxy::{LogProxy, Sink};
   ///
-  /// #[tokio::main]
-  /// async fn main() {
-  ///   let sink = SinkBuilder::default().stdout().spawn();
-  ///   LogProxy::default().stderr(|p| p.sink(sink));
-  /// }
+  /// let sink = Sink::stdout();
+  /// LogProxy::default().stderr(|p| p.sink(sink));
   /// ```
   pub fn stderr(mut self, builder: impl FnOnce(ProcessorBuilder) -> Processor) -> Self {
     self.stderr = Some(builder(ProcessorBuilder::default()));
@@ -190,18 +184,18 @@ mod tests {
     assert!(!proxy.disable_lambda_telemetry_log_fd_for_handler);
   }
 
-  #[tokio::test]
-  async fn test_log_proxy_stdout() {
-    let sink = SinkBuilder::default().stdout().spawn();
+  #[test]
+  fn test_log_proxy_stdout() {
+    let sink = Sink::stdout();
     let proxy = LogProxy::default().stdout(|p| p.sink(sink));
     assert!(proxy.stdout.is_some());
     assert!(proxy.stderr.is_none());
     assert!(!proxy.disable_lambda_telemetry_log_fd_for_handler);
   }
 
-  #[tokio::test]
-  async fn test_log_proxy_stderr() {
-    let sink = SinkBuilder::default().stdout().spawn();
+  #[test]
+  fn test_log_proxy_stderr() {
+    let sink = Sink::stdout();
     let proxy = LogProxy::default().stderr(|p| p.sink(sink));
     assert!(proxy.stdout.is_none());
     assert!(proxy.stderr.is_some());

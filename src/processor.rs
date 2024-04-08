@@ -38,28 +38,19 @@ mod tests {
 
   #[tokio::test]
   async fn test_processor_process_default() {
-    let sink = SinkBuilder::default()
-      .writer(
-        tokio_test::io::Builder::new()
-          .write(b"hello")
-          .write(b"\n")
-          .build(),
-      )
-      .spawn();
+    let sink = Sink::new(tokio_test::io::Builder::new().write(b"hello\n").build());
     let mut processor = ProcessorBuilder::default().sink(sink);
     processor.process("hello".to_string()).await;
   }
 
   #[tokio::test]
   async fn test_processor_process_with_transformer() {
-    let sink = SinkBuilder::default()
-      .writer(
-        tokio_test::io::Builder::new()
-          .write(b"hello")
-          .write(b"\n")
-          .build(),
-      )
-      .spawn();
+    let sink = Sink::new(
+      tokio_test::io::Builder::new()
+        .write(b"hello")
+        .write(b"\n")
+        .build(),
+    );
     let mut processor = ProcessorBuilder::default()
       .ignore(|line| line == "world")
       .sink(sink);
