@@ -7,6 +7,7 @@
 - Feat: `Processor.process` will return whether the line is written to the sink.
 - Fix: remove `'\r'` in line endings before passed to processor.
 - Fix: ignore empty lines before passed to processor.
+- Fix: apply tokio biased select to ensure logs are processed before the next invocation.
 - Perf: apply actor pattern to `Sink` and add action buffers.
 - Perf: reduce async write calls.
 

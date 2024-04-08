@@ -5,7 +5,7 @@ pub use processor::*;
 use aws_lambda_runtime_proxy::Proxy;
 use std::process::Stdio;
 use tokio::{
-  io::{AsyncBufReadExt, AsyncRead, BufReader, Lines},
+  io::{AsyncBufReadExt, AsyncRead, BufReader},
   sync::{mpsc, oneshot, Mutex},
 };
 
@@ -129,32 +129,27 @@ where
 
     loop {
       tokio::select! {
+        // enable `biased` to make sure we always check lines before checking the server thread
+        biased;
+
         // wait until there is at least one line in the buffer
         line = lines.next_line() => {
-          let mut need_flush = false;
-
-          // process the first line
+          // process the line
           let line = line.unwrap().unwrap();
-          // `next_line` already removes '\n' and '\r', so we only need to check if the line is empty
+          // `next_line` already removes '\n' and '\r', so we only need to check if the line is empty.
+          // only process if the line is not empty
           if !line.is_empty() {
-            processor.process(line).await;
-            need_flush = true;
-          }
-
-          // process the remaining lines and flush if needed
-          if need_flush || process_remaining_lines(&mut lines, &mut processor).await {
-            processor.flush().await;
+            if processor.process(line).await {
+              // only flush if the line is written to the sink
+              // TODO: do we need to flush every time?
+              processor.flush().await;
+            }
           }
         }
         // the server thread requests to check if the processor has finished processing the logs.
-        // this is a fallback in case the server thread got `invocation/next` while
-        // there are just new lines not processed by the previous branch
         ack_tx = checker_rx.recv() => {
-          if process_remaining_lines(&mut lines, &mut processor).await {
-            processor.flush().await;
-          }
-
-          // stop suppressing the server thread
+          // since we are using `biased` select, we don't need to check if the line is empty,
+          // just stop suppressing the server thread if the branch is executed
           ack_tx.unwrap().send(()).unwrap();
         }
       }
@@ -162,16 +157,6 @@ where
   });
 
   checker_tx
-}
-
-fn next_newline_index<T: AsyncRead + Send + 'static>(
-  lines: &mut Lines<BufReader<T>>,
-) -> Option<usize>
-where
-  BufReader<T>: Unpin,
-{
-  // TODO: check by char instead of by byte?
-  lines.get_ref().buffer().iter().position(|&b| b == b'\n')
 }
 
 async fn send_checker(
@@ -191,33 +176,6 @@ async fn wait_for_ack(ack_rx: Option<oneshot::Receiver<()>>) {
   if let Some(ack_rx) = ack_rx {
     ack_rx.await.unwrap();
   }
-}
-
-async fn process_remaining_lines<T: AsyncRead + Send + 'static>(
-  lines: &mut Lines<BufReader<T>>,
-  processor: &mut Processor,
-) -> bool
-where
-  BufReader<T>: Unpin,
-{
-  let mut need_flush = false;
-  // check if there are lines in the buffer
-  while let Some(index) = next_newline_index(lines) {
-    // next line exists, process it
-    let mut line =
-      String::from_utf8(lines.get_ref().buffer()[..index].to_vec()).expect("invalid utf-8");
-    lines.get_mut().consume(index + 1); // index + 1 is the count
-
-    if line.ends_with('\r') {
-      line.pop(); // remove '\r'
-    }
-    if line.is_empty() {
-      continue;
-    }
-    processor.process(line).await;
-    need_flush = true;
-  }
-  need_flush
 }
 
 #[cfg(test)]
@@ -256,20 +214,5 @@ mod tests {
     assert!(proxy.stdout.is_none());
     assert!(proxy.stderr.is_none());
     assert!(proxy.disable_lambda_telemetry_log_fd);
-  }
-
-  #[tokio::test]
-  async fn test_has_newline_in_buffer() {
-    let mut lines = BufReader::new("\nhello\nworld\n\n".as_bytes()).lines();
-    lines.get_mut().fill_buf().await.unwrap();
-    assert_eq!(next_newline_index(&mut lines), Some(0));
-    assert_eq!(lines.next_line().await.unwrap(), Some("".into()));
-    assert_eq!(next_newline_index(&mut lines), Some(5));
-    assert_eq!(lines.next_line().await.unwrap(), Some("hello".into()));
-    assert_eq!(next_newline_index(&mut lines), Some(5));
-    assert_eq!(lines.next_line().await.unwrap(), Some("world".into()));
-    assert_eq!(next_newline_index(&mut lines), Some(0));
-    assert_eq!(lines.next_line().await.unwrap(), Some("".into()));
-    assert_eq!(next_newline_index(&mut lines), None);
   }
 }
