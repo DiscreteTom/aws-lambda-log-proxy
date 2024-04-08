@@ -127,43 +127,31 @@ where
     let reader = BufReader::new(file);
     let mut lines = reader.lines();
 
-    let mut need_flush = false;
     loop {
       tokio::select! {
         // wait until there is at least one line in the buffer
         line = lines.next_line() => {
+          let mut need_flush = false;
+
+          // process the first line
           let line = line.unwrap().unwrap();
           // `next_line` already removes '\n' and '\r', so we only need to check if the line is empty
-          if line.is_empty() {
-            continue;
+          if !line.is_empty() {
+            processor.process(line).await;
+            need_flush = true;
           }
-          processor.process(line).await;
-          need_flush = true;
+
+          // process the remaining lines and flush if needed
+          if need_flush || process_remaining_lines(&mut lines, &mut processor).await {
+            processor.flush().await;
+          }
         }
         // the server thread requests to check if the processor has finished processing the logs.
         // this is a fallback in case the server thread got `invocation/next` while
         // there are just new lines not processed by the previous branch
         ack_tx = checker_rx.recv() => {
-          // check if there are lines in the buffer
-          while let Some(index) = next_newline_index(&mut lines) {
-            // next line exists, process it
-            let mut line = String::from_utf8(lines.get_ref().buffer()[..index].to_vec()).expect("invalid utf-8");
-            lines.get_mut().consume(index + 1); // index + 1 is the count
-
-            if line.ends_with('\r') {
-              line.pop(); // remove '\r'
-            }
-            if line.is_empty() {
-              continue;
-            }
-            processor.process(line).await;
-            need_flush = true;
-          }
-
-          // flush the processor since the execution environment might be frozen
-          if need_flush {
+          if process_remaining_lines(&mut lines, &mut processor).await {
             processor.flush().await;
-            need_flush = false;
           }
 
           // stop suppressing the server thread
@@ -203,6 +191,33 @@ async fn wait_for_ack(ack_rx: Option<oneshot::Receiver<()>>) {
   if let Some(ack_rx) = ack_rx {
     ack_rx.await.unwrap();
   }
+}
+
+async fn process_remaining_lines<T: AsyncRead + Send + 'static>(
+  lines: &mut Lines<BufReader<T>>,
+  processor: &mut Processor,
+) -> bool
+where
+  BufReader<T>: Unpin,
+{
+  let mut need_flush = false;
+  // check if there are lines in the buffer
+  while let Some(index) = next_newline_index(lines) {
+    // next line exists, process it
+    let mut line =
+      String::from_utf8(lines.get_ref().buffer()[..index].to_vec()).expect("invalid utf-8");
+    lines.get_mut().consume(index + 1); // index + 1 is the count
+
+    if line.ends_with('\r') {
+      line.pop(); // remove '\r'
+    }
+    if line.is_empty() {
+      continue;
+    }
+    processor.process(line).await;
+    need_flush = true;
+  }
+  need_flush
 }
 
 #[cfg(test)]
