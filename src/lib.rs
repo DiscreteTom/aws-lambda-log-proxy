@@ -15,8 +15,8 @@ pub struct LogProxy {
   pub stdout: Option<Processor>,
   /// See [`Self::stderr`].
   pub stderr: Option<Processor>,
-  /// See [`Self::disable_lambda_telemetry_log_fd`].
-  pub disable_lambda_telemetry_log_fd: bool,
+  /// See [`Self::disable_lambda_telemetry_log_fd_for_handler`].
+  pub disable_lambda_telemetry_log_fd_for_handler: bool,
 }
 
 impl LogProxy {
@@ -56,8 +56,8 @@ impl LogProxy {
 
   /// Remove the `_LAMBDA_TELEMETRY_LOG_FD` environment variable for the handler process
   /// to prevent logs from being written to other file descriptors.
-  pub fn disable_lambda_telemetry_log_fd(mut self, disable: bool) -> Self {
-    self.disable_lambda_telemetry_log_fd = disable;
+  pub fn disable_lambda_telemetry_log_fd_for_handler(mut self, disable: bool) -> Self {
+    self.disable_lambda_telemetry_log_fd_for_handler = disable;
     self
   }
 
@@ -74,7 +74,7 @@ impl LogProxy {
       command.stderr(Stdio::piped());
     }
 
-    if self.disable_lambda_telemetry_log_fd {
+    if self.disable_lambda_telemetry_log_fd_for_handler {
       command.env_remove("_LAMBDA_TELEMETRY_LOG_FD");
     }
 
@@ -187,7 +187,7 @@ mod tests {
     let proxy = LogProxy::default();
     assert!(proxy.stdout.is_none());
     assert!(proxy.stderr.is_none());
-    assert!(!proxy.disable_lambda_telemetry_log_fd);
+    assert!(!proxy.disable_lambda_telemetry_log_fd_for_handler);
   }
 
   #[tokio::test]
@@ -196,7 +196,7 @@ mod tests {
     let proxy = LogProxy::default().stdout(|p| p.sink(sink));
     assert!(proxy.stdout.is_some());
     assert!(proxy.stderr.is_none());
-    assert!(!proxy.disable_lambda_telemetry_log_fd);
+    assert!(!proxy.disable_lambda_telemetry_log_fd_for_handler);
   }
 
   #[tokio::test]
@@ -205,14 +205,14 @@ mod tests {
     let proxy = LogProxy::default().stderr(|p| p.sink(sink));
     assert!(proxy.stdout.is_none());
     assert!(proxy.stderr.is_some());
-    assert!(!proxy.disable_lambda_telemetry_log_fd);
+    assert!(!proxy.disable_lambda_telemetry_log_fd_for_handler);
   }
 
   #[test]
   fn test_log_proxy_disable_lambda_telemetry_log_fd() {
-    let proxy = LogProxy::default().disable_lambda_telemetry_log_fd(true);
+    let proxy = LogProxy::default().disable_lambda_telemetry_log_fd_for_handler(true);
     assert!(proxy.stdout.is_none());
     assert!(proxy.stderr.is_none());
-    assert!(proxy.disable_lambda_telemetry_log_fd);
+    assert!(proxy.disable_lambda_telemetry_log_fd_for_handler);
   }
 }

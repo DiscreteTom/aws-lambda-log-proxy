@@ -3,6 +3,7 @@
 ## v0.2.0
 
 - **_Breaking Change_**: rewrite `Sink`, use `SinkBuilder` to build `Sink` instances.
+- **_Breaking Change_**: rename `LogProxy.disable_lambda_telemetry_log_fd` to `LogProxy.disable_lambda_telemetry_log_fd_for_handler`.
 - Feat: implement `Default` for `OutputFormat`.
 - Feat: `Processor.process` will return whether the line is written to the sink.
 - Fix: remove `'\r'` in line endings before passed to processor.
