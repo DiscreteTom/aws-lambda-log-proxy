@@ -141,7 +141,7 @@ impl Sink {
     self.action_tx.send(Action::WriteLine(line)).await.unwrap()
   }
 
-  /// Flush the sink.
+  /// Flush the sink. Wait until all buffered data is written to the underlying writer.
   pub async fn flush(&self) {
     let (ack_tx, ack_rx) = oneshot::channel();
     self.action_tx.send(Action::Flush(ack_tx)).await.unwrap();
