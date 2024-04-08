@@ -16,10 +16,13 @@ pub struct Processor {
 
 impl Processor {
   /// Process a log line with [`Self::transformer`] and write it to [`Self::sink`].
-  /// `'\n'` will be appended to `line`.
-  pub async fn process(&mut self, line: String) {
+  /// `'\n'` will be appended to `line`. Return `true` if the line is written to the sink.
+  pub async fn process(&mut self, line: String) -> bool {
     if let Some(transformed) = (self.transformer)(line) {
       self.sink.write_line(transformed).await;
+      true
+    } else {
+      false
     }
   }
 
