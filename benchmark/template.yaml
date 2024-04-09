@@ -1,0 +1,45 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+
+Globals:
+  Function:
+    Handler: index.handler
+    Runtime: nodejs20.x
+    CodeUri: nodejs
+    MemorySize: 1024
+    Timeout: 30
+
+Resources:
+  LambdaLogProxyLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      ContentUri: layer/
+      CompatibleArchitectures:
+        - x86_64
+  LambdaLogProxyEnabledFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Layers:
+        - !Ref LambdaLogProxyLayer
+      Environment:
+        Variables:
+          AWS_LAMBDA_EXEC_WRAPPER: /opt/entry.sh
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /enabled
+            Method: get
+  LambdaLogProxyDisabledFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /disabled
+            Method: get
+
+Outputs:
+  API:
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
