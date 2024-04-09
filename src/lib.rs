@@ -1,10 +1,10 @@
 mod processor;
 
-use http_body_util::{BodyExt, Full};
-use hyper::Response;
 pub use processor::*;
 
 use aws_lambda_runtime_proxy::{LambdaRuntimeApiClient, Proxy};
+use http_body_util::{BodyExt, Full};
+use hyper::Response;
 use std::process::Stdio;
 use tokio::{
   io::{AsyncBufReadExt, AsyncRead, BufReader},
