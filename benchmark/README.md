@@ -21,6 +21,10 @@ In one line
 RUSTFLAGS="-C link-arg=-s" cargo build --release --target x86_64-unknown-linux-musl --example hello_world && mkdir -p benchmark/layer && cp target/x86_64-unknown-linux-musl/release/examples/hello_world benchmark/layer/ && cp benchmark/scripts/entry.sh benchmark/layer/ && cd benchmark && sam build && sam deploy && cd ..
 ```
 
+## Validate
+
+Run [`./validate.sh`](./validate.sh) to ensure the `invocation/next` is properly suppressed.
+
 ## Test
 
 The SAM will deploy the stack with an API. Test it with [`plow`](https://github.com/six-ddc/plow):
