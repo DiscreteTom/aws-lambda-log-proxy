@@ -8,8 +8,8 @@ async fn main() {
   LogProxy::default()
     .stdout(|processor| {
       processor
-        // only keep lines that contains "hello"
-        .filter(|line| line.contains("hello"))
+        // only keep lines that contains "done"
+        .filter(|line| line.contains("done"))
         // clone the sink instead of creating a new one
         // to prevent interleaved output
         .sink(sink.clone())
