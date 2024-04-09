@@ -124,6 +124,33 @@ Resources:
           Properties:
             Path: /10000/disabled
             Method: get
+  LambdaLogProxy100000EnabledFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Layers:
+        - !Ref LambdaLogProxyLayer
+      Environment:
+        Variables:
+          AWS_LAMBDA_EXEC_WRAPPER: /opt/entry.sh
+          LOG_COUNT: "100000"
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /100000/enabled
+            Method: get
+  LambdaLogProxy100000DisabledFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Environment:
+        Variables:
+          LOG_COUNT: "100000"
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /100000/disabled
+            Method: get
 
 Outputs:
   API:
