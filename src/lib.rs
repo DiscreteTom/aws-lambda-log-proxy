@@ -3,8 +3,6 @@ mod processor;
 pub use processor::*;
 
 use aws_lambda_runtime_proxy::{LambdaRuntimeApiClient, Proxy};
-use http_body_util::{BodyExt, Full};
-use hyper::Response;
 use std::process::Stdio;
 use tokio::{
   io::{AsyncBufReadExt, AsyncRead, BufReader},
@@ -106,14 +104,7 @@ impl LogProxy {
             wait_for_ack(stdout_ack_rx).await;
             wait_for_ack(stderr_ack_rx).await;
           }
-          let res = LambdaRuntimeApiClient::new()
-            .await
-            .send_request(req)
-            .await
-            .unwrap();
-          let (parts, body) = res.into_parts();
-          let bytes = body.collect().await.unwrap().to_bytes();
-          Ok(Response::from_parts(parts, Full::new(bytes)))
+          LambdaRuntimeApiClient::forward(req).await
         }
       })
       .await
