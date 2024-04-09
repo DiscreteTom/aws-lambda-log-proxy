@@ -1,12 +1,14 @@
 mod processor;
 
+use http_body_util::{BodyExt, Full};
+use hyper::Response;
 pub use processor::*;
 
-use aws_lambda_runtime_proxy::Proxy;
+use aws_lambda_runtime_proxy::{LambdaRuntimeApiClient, Proxy};
 use std::process::Stdio;
 use tokio::{
   io::{AsyncBufReadExt, AsyncRead, BufReader},
-  sync::{mpsc, oneshot, Mutex},
+  sync::{mpsc, oneshot},
 };
 
 #[derive(Default)]
@@ -85,24 +87,34 @@ impl LogProxy {
       .take()
       .map(|file| spawn_reader(file, self.stderr.unwrap()));
 
-    let client = Mutex::new(proxy.client);
     proxy
       .server
-      .serve(|req| async {
-        if req.uri().path() == "/2018-06-01/runtime/invocation/next" {
-          // in lambda, send `invocation/next` will freeze current execution environment,
-          // unprocessed logs might be lost,
-          // so before proceeding, wait for the processors to finish processing the logs
+      .serve(move |req| {
+        let stdout_checker_tx = stdout_checker_tx.clone();
+        let stderr_checker_tx = stderr_checker_tx.clone();
+        async move {
+          if req.uri().path() == "/2018-06-01/runtime/invocation/next" {
+            // in lambda, send `invocation/next` will freeze current execution environment,
+            // unprocessed logs might be lost,
+            // so before proceeding, wait for the processors to finish processing the logs
 
-          // send checkers to reader threads
-          let stdout_ack_rx = send_checker(&stdout_checker_tx).await;
-          let stderr_ack_rx = send_checker(&stderr_checker_tx).await;
+            // send checkers to reader threads
+            let stdout_ack_rx = send_checker(&stdout_checker_tx).await;
+            let stderr_ack_rx = send_checker(&stderr_checker_tx).await;
 
-          // wait for the all checkers to finish
-          wait_for_ack(stdout_ack_rx).await;
-          wait_for_ack(stderr_ack_rx).await;
+            // wait for the all checkers to finish
+            wait_for_ack(stdout_ack_rx).await;
+            wait_for_ack(stderr_ack_rx).await;
+          }
+          let res = LambdaRuntimeApiClient::new()
+            .await
+            .send_request(req)
+            .await
+            .unwrap();
+          let (parts, body) = res.into_parts();
+          let bytes = body.collect().await.unwrap().to_bytes();
+          Ok(Response::from_parts(parts, Full::new(bytes)))
         }
-        client.lock().await.send_request(req).await
       })
       .await
   }
