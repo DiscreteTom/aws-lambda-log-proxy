@@ -26,8 +26,8 @@ RUSTFLAGS="-C link-arg=-s" cargo build --release --target x86_64-unknown-linux-m
 The SAM will deploy the stack with an API. Test it with [`plow`](https://github.com/six-ddc/plow):
 
 ```bash
-# e.g. disable the layer, test 1000 requests
-plow -n 1000 https://abcdefgh.execute-api.us-east-1.amazonaws.com/Prod/disabled
-# e.g. enable the layer, test 1000 requests
-plow -n 1000 https://abcdefgh.execute-api.us-east-1.amazonaws.com/Prod/enabled
+# e.g. disable the layer, test 1000 requests, 100 log messages per invocation
+plow -n 1000 https://abcdefgh.execute-api.us-east-1.amazonaws.com/Prod/100/disabled
+# e.g. enable the layer, test 1000 requests, 100 log messages per invocation
+plow -n 1000 https://abcdefgh.execute-api.us-east-1.amazonaws.com/Prod/100/enabled
 ```

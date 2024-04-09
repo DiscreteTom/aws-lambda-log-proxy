@@ -3,7 +3,7 @@ Transform: AWS::Serverless-2016-10-31
 
 Globals:
   Function:
-    Handler: index.handler
+    Handler: src/index.handler
     Runtime: nodejs20.x
     CodeUri: nodejs
     MemorySize: 1024
@@ -16,7 +16,7 @@ Resources:
       ContentUri: layer/
       CompatibleArchitectures:
         - x86_64
-  LambdaLogProxyEnabledFunction:
+  LambdaLogProxy10EnabledFunction:
     Type: AWS::Serverless::Function
     Properties:
       Layers:
@@ -24,20 +24,105 @@ Resources:
       Environment:
         Variables:
           AWS_LAMBDA_EXEC_WRAPPER: /opt/entry.sh
+          LOG_COUNT: "10"
       Events:
         ApiEvent:
           Type: Api
           Properties:
-            Path: /enabled
+            Path: /10/enabled
             Method: get
-  LambdaLogProxyDisabledFunction:
+  LambdaLogProxy10DisabledFunction:
     Type: AWS::Serverless::Function
     Properties:
+      Environment:
+        Variables:
+          LOG_COUNT: "10"
       Events:
         ApiEvent:
           Type: Api
           Properties:
-            Path: /disabled
+            Path: /10/disabled
+            Method: get
+  LambdaLogProxy100EnabledFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Layers:
+        - !Ref LambdaLogProxyLayer
+      Environment:
+        Variables:
+          AWS_LAMBDA_EXEC_WRAPPER: /opt/entry.sh
+          LOG_COUNT: "100"
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /100/enabled
+            Method: get
+  LambdaLogProxy100DisabledFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Environment:
+        Variables:
+          LOG_COUNT: "100"
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /100/disabled
+            Method: get
+  LambdaLogProxy1000EnabledFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Layers:
+        - !Ref LambdaLogProxyLayer
+      Environment:
+        Variables:
+          AWS_LAMBDA_EXEC_WRAPPER: /opt/entry.sh
+          LOG_COUNT: "1000"
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /1000/enabled
+            Method: get
+  LambdaLogProxy1000DisabledFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Environment:
+        Variables:
+          LOG_COUNT: "1000"
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /1000/disabled
+            Method: get
+  LambdaLogProxy10000EnabledFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Layers:
+        - !Ref LambdaLogProxyLayer
+      Environment:
+        Variables:
+          AWS_LAMBDA_EXEC_WRAPPER: /opt/entry.sh
+          LOG_COUNT: "10000"
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /10000/enabled
+            Method: get
+  LambdaLogProxy10000DisabledFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Environment:
+        Variables:
+          LOG_COUNT: "10000"
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /10000/disabled
             Method: get
 
 Outputs:
