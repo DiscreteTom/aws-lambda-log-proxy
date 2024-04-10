@@ -16,10 +16,12 @@ pub struct Processor {
 
 impl Processor {
   /// Process a log line with [`Self::transformer`] and write it to [`Self::sink`].
-  /// `'\n'` will be appended to `line`. Return `true` if the line is written to the sink.
-  pub async fn process(&mut self, line: String) -> bool {
+  /// `'\n'` will be appended to `line`.
+  /// Return `true` if the line is written to the sink (maybe an empty line).
+  /// Return `false` if the line is ignored.
+  pub async fn process(&mut self, line: String, timestamp: i64) -> bool {
     if let Some(transformed) = (self.transformer)(line) {
-      self.sink.write_line(transformed).await;
+      self.sink.write_line(transformed, timestamp).await;
       true
     } else {
       false
@@ -40,7 +42,7 @@ mod tests {
   async fn test_processor_process_default() {
     let sink = Sink::new(tokio_test::io::Builder::new().write(b"hello\n").build());
     let mut processor = ProcessorBuilder::default().sink(sink);
-    processor.process("hello".to_string()).await;
+    processor.process("hello".to_string(), 0).await;
   }
 
   #[tokio::test]
@@ -54,7 +56,7 @@ mod tests {
     let mut processor = ProcessorBuilder::default()
       .ignore(|line| line == "world")
       .sink(sink);
-    processor.process("hello".to_string()).await;
-    processor.process("world".to_string()).await;
+    processor.process("hello".to_string(), 0).await;
+    processor.process("world".to_string(), 0).await;
   }
 }

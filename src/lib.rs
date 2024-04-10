@@ -9,14 +9,26 @@ use tokio::{
   sync::{mpsc, oneshot},
 };
 
-#[derive(Default)]
 pub struct LogProxy {
   /// See [`Self::stdout`].
   pub stdout: Option<Processor>,
   /// See [`Self::stderr`].
   pub stderr: Option<Processor>,
+  /// See [`Self::buffer_size`].
+  pub buffer_size: usize,
   /// See [`Self::disable_lambda_telemetry_log_fd_for_handler`].
   pub disable_lambda_telemetry_log_fd_for_handler: bool,
+}
+
+impl Default for LogProxy {
+  fn default() -> Self {
+    Self {
+      stdout: None,
+      stderr: None,
+      buffer_size: 256,
+      disable_lambda_telemetry_log_fd_for_handler: false,
+    }
+  }
 }
 
 impl LogProxy {
@@ -45,6 +57,17 @@ impl LogProxy {
   /// ```
   pub fn stderr(mut self, builder: impl FnOnce(ProcessorBuilder) -> Processor) -> Self {
     self.stderr = Some(builder(ProcessorBuilder::default()));
+    self
+  }
+
+  /// Set how many lines can be buffered if the processing is slow.
+  /// If the handler process writes too many lines then return the response immediately,
+  /// the suppression of `invocation/next`
+  /// might not working, maybe some logs will be processed in the next invocation.
+  /// Increase this value should help to prevent logs from being lost.
+  /// The default value is `256`.
+  pub fn buffer_size(mut self, buffer_size: usize) -> Self {
+    self.buffer_size = buffer_size;
     self
   }
 
@@ -78,12 +101,12 @@ impl LogProxy {
       .handler
       .stdout
       .take()
-      .map(|file| spawn_reader(file, self.stdout.unwrap()));
+      .map(|file| spawn_reader(file, self.stdout.unwrap(), self.buffer_size));
     let stderr_checker_tx = proxy
       .handler
       .stderr
       .take()
-      .map(|file| spawn_reader(file, self.stderr.unwrap()));
+      .map(|file| spawn_reader(file, self.stderr.unwrap(), self.buffer_size));
 
     proxy
       .server
@@ -97,12 +120,12 @@ impl LogProxy {
             // so before proceeding, wait for the processors to finish processing the logs
 
             // send checkers to reader threads
-            let stdout_ack_rx = send_checker(&stdout_checker_tx).await;
-            let stderr_ack_rx = send_checker(&stderr_checker_tx).await;
+            let stdout_ack_rx = send_checker(&stdout_checker_tx);
+            let stderr_ack_rx = send_checker(&stderr_checker_tx);
 
             // wait for the all checkers to finish
-            wait_for_ack(stdout_ack_rx).await;
-            wait_for_ack(stderr_ack_rx).await;
+            wait_for_ack(stdout_ack_rx.await).await;
+            wait_for_ack(stderr_ack_rx.await).await;
           }
           LambdaRuntimeApiClient::forward(req).await
         }
@@ -114,38 +137,50 @@ impl LogProxy {
 fn spawn_reader<T: AsyncRead + Send + 'static>(
   file: T,
   mut processor: Processor,
+  buffer_size: usize,
 ) -> mpsc::Sender<oneshot::Sender<()>>
 where
   BufReader<T>: Unpin,
 {
   let (checker_tx, mut checker_rx) = mpsc::channel::<oneshot::Sender<()>>(1);
+  let (buffer_tx, mut buffer_rx) = mpsc::channel(buffer_size);
 
+  // the reader thread, read from the file then push into the buffer
   tokio::spawn(async move {
     let reader = BufReader::new(file);
     let mut lines = reader.lines();
+    while let Ok(Some(line)) = lines.next_line().await {
+      // `next_line` already removes '\n' and '\r', so we only need to check if the line is empty.
+      // only push into buffer if the line is not empty
+      if !line.is_empty() {
+        // put line in a queue, record the timestamp
+        buffer_tx
+          .send((line, chrono::Utc::now().timestamp_micros()))
+          .await
+          .unwrap();
+      }
+    }
+  });
 
+  // the processor thread
+  tokio::spawn(async move {
     loop {
       tokio::select! {
-        // enable `biased` to make sure we always check lines before checking the server thread
+        // enable `biased` to make sure we always try to recv from buffer before accept the server thread checker
         biased;
 
-        // wait until there is at least one line in the buffer
-        line = lines.next_line() => {
-          // process the line
-          let line = line.unwrap().unwrap();
-          // `next_line` already removes '\n' and '\r', so we only need to check if the line is empty.
-          // only process if the line is not empty
-          if !line.is_empty() {
-            if processor.process(line).await {
-              // only flush if the line is written to the sink
-              // TODO: do we need to flush every time?
-              processor.flush().await;
-            }
+        res = buffer_rx.recv() => {
+          let (line, timestamp) = res.unwrap();
+          if processor.process(line, timestamp).await {
+            // only flush if the line is written to the sink
+            // TODO: do we need to flush every time? or only flush in the next branch on the server thread checker?
+            // we flush here to ensure the logs are written as soon as possible
+            processor.flush().await;
           }
         }
         // the server thread requests to check if the processor has finished processing the logs.
         ack_tx = checker_rx.recv() => {
-          // since we are using `biased` select, we don't need to check if the line is empty,
+          // since we are using `biased` select, we don't need to check if there is a message in the buffer,
           // just stop suppressing the server thread if the branch is executed
           ack_tx.unwrap().send(()).unwrap();
         }
@@ -184,6 +219,7 @@ mod tests {
     let proxy = LogProxy::default();
     assert!(proxy.stdout.is_none());
     assert!(proxy.stderr.is_none());
+    assert_eq!(proxy.buffer_size, 256);
     assert!(!proxy.disable_lambda_telemetry_log_fd_for_handler);
   }
 
@@ -193,6 +229,7 @@ mod tests {
     let proxy = LogProxy::default().stdout(|p| p.sink(sink));
     assert!(proxy.stdout.is_some());
     assert!(proxy.stderr.is_none());
+    assert_eq!(proxy.buffer_size, 256);
     assert!(!proxy.disable_lambda_telemetry_log_fd_for_handler);
   }
 
@@ -202,7 +239,14 @@ mod tests {
     let proxy = LogProxy::default().stderr(|p| p.sink(sink));
     assert!(proxy.stdout.is_none());
     assert!(proxy.stderr.is_some());
+    assert_eq!(proxy.buffer_size, 256);
     assert!(!proxy.disable_lambda_telemetry_log_fd_for_handler);
+  }
+
+  #[test]
+  fn test_log_proxy_buffer_size() {
+    let proxy = LogProxy::default().buffer_size(512);
+    assert_eq!(proxy.buffer_size, 512);
   }
 
   #[test]
@@ -210,6 +254,7 @@ mod tests {
     let proxy = LogProxy::default().disable_lambda_telemetry_log_fd_for_handler(true);
     assert!(proxy.stdout.is_none());
     assert!(proxy.stderr.is_none());
+    assert_eq!(proxy.buffer_size, 256);
     assert!(proxy.disable_lambda_telemetry_log_fd_for_handler);
   }
 }

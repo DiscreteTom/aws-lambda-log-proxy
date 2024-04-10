@@ -3,6 +3,8 @@
 ## v0.2.0
 
 - **_Breaking Change_**: rename `LogProxy.disable_lambda_telemetry_log_fd` to `LogProxy.disable_lambda_telemetry_log_fd_for_handler`.
+- **_Breaking Change_**: `Sink::write_line` and `Processor::process` need a timestamp as the second argument.
+- Feat: add `LogProxy::buffer_size`, store lines in a buffer and record the in-buffer timestamp.
 - Feat: implement `Default` for `OutputFormat`.
 - Feat: `Processor.process` will return whether the line is written to the sink.
 - Fix: remove `'\r'` in line endings before passed to processor.

@@ -71,14 +71,14 @@ impl Sink {
   }
 
   /// Write a string to the sink with a newline(`'\n'`) appended.
-  pub async fn write_line(&self, s: String) {
+  /// The `timestamp` will be used if the [`Self::format`] is [`OutputFormat::TelemetryLogFd`].
+  pub async fn write_line(&self, s: String, timestamp: i64) {
     let mut line = s.into_bytes();
     line.push(b'\n');
     match self.format {
       OutputFormat::Standard => self.writer.lock().await.write_all(&line).await.unwrap(),
       OutputFormat::TelemetryLogFd => {
-        let mut content =
-          build_telemetry_log_fd_format_header(&line, chrono::Utc::now().timestamp_micros());
+        let mut content = build_telemetry_log_fd_format_header(&line, timestamp);
         content.append(&mut line);
         self.writer.lock().await.write_all(&content).await.unwrap()
       }
@@ -161,7 +161,7 @@ mod tests {
   async fn sink_write_line() {
     // standard format
     Sink::new(tokio_test::io::Builder::new().write(b"hello\n").build())
-      .write_line("hello".to_string())
+      .write_line("hello".to_string(), 0)
       .await;
 
     // telemetry log format header
@@ -169,5 +169,15 @@ mod tests {
       build_telemetry_log_fd_format_header("hello\n".as_bytes(), 0),
       &[0xa5, 0x5a, 0x00, 0x03, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 0]
     );
+
+    // telemetry log format
+    Sink::new(
+      tokio_test::io::Builder::new()
+        .write(b"\xa5\x5a\x00\x03\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00hello\n")
+        .build(),
+    )
+    .format(OutputFormat::TelemetryLogFd)
+    .write_line("hello".to_string(), 0)
+    .await;
   }
 }
