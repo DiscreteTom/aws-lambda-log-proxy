@@ -3,10 +3,11 @@ mod processor;
 pub use processor::*;
 
 use aws_lambda_runtime_proxy::{LambdaRuntimeApiClient, Proxy};
-use std::process::Stdio;
+use std::{process::Stdio, time::Duration};
 use tokio::{
   io::{AsyncBufReadExt, AsyncRead, BufReader},
   sync::{mpsc, oneshot},
+  time::sleep,
 };
 
 pub struct LogProxy {
@@ -16,6 +17,8 @@ pub struct LogProxy {
   pub stderr: Option<Processor>,
   /// See [`Self::buffer_size`].
   pub buffer_size: usize,
+  /// See [`Self::suppression_timeout`].
+  pub suppression_timeout_ms: usize,
   /// See [`Self::disable_lambda_telemetry_log_fd_for_handler`].
   pub disable_lambda_telemetry_log_fd_for_handler: bool,
 }
@@ -26,6 +29,7 @@ impl Default for LogProxy {
       stdout: None,
       stderr: None,
       buffer_size: 256,
+      suppression_timeout_ms: 0,
       disable_lambda_telemetry_log_fd_for_handler: false,
     }
   }
@@ -71,6 +75,17 @@ impl LogProxy {
     self
   }
 
+  /// Set the timeout for the suppression of `invocation/next`.
+  /// This value won't affect the functions response time, for example if your
+  /// handler function returns in 10ms and the suppression timeout is set to 5000ms,
+  /// the synchronous invoker like API Gateway will get the response in 10ms,
+  /// but the lambda function will keep running for 5000ms to process the logs.
+  /// The default value is `0`.
+  pub fn suppression_timeout_ms(mut self, ms: usize) -> Self {
+    self.suppression_timeout_ms = ms;
+    self
+  }
+
   /// Remove the `_LAMBDA_TELEMETRY_LOG_FD` environment variable for the handler process
   /// to prevent logs from being written to other file descriptors.
   pub fn disable_lambda_telemetry_log_fd_for_handler(mut self, disable: bool) -> Self {
@@ -97,16 +112,22 @@ impl LogProxy {
 
     let mut proxy = Proxy::default().command(command).spawn().await;
 
-    let stdout_checker_tx = proxy
-      .handler
-      .stdout
-      .take()
-      .map(|file| spawn_reader(file, self.stdout.unwrap(), self.buffer_size));
-    let stderr_checker_tx = proxy
-      .handler
-      .stderr
-      .take()
-      .map(|file| spawn_reader(file, self.stderr.unwrap(), self.buffer_size));
+    let stdout_checker_tx = proxy.handler.stdout.take().map(|file| {
+      spawn_reader(
+        file,
+        self.stdout.unwrap(),
+        self.buffer_size,
+        self.suppression_timeout_ms,
+      )
+    });
+    let stderr_checker_tx = proxy.handler.stderr.take().map(|file| {
+      spawn_reader(
+        file,
+        self.stderr.unwrap(),
+        self.buffer_size,
+        self.suppression_timeout_ms,
+      )
+    });
 
     proxy
       .server
@@ -138,11 +159,12 @@ fn spawn_reader<T: AsyncRead + Send + 'static>(
   file: T,
   mut processor: Processor,
   buffer_size: usize,
-) -> mpsc::Sender<oneshot::Sender<()>>
+  suppression_timeout_ms: usize,
+) -> mpsc::Sender<Checker>
 where
   BufReader<T>: Unpin,
 {
-  let (checker_tx, mut checker_rx) = mpsc::channel::<oneshot::Sender<()>>(1);
+  let (checker_tx, mut checker_rx) = mpsc::channel::<Checker>(1);
   let (buffer_tx, mut buffer_rx) = mpsc::channel(buffer_size);
 
   // the reader thread, read from the file then push into the buffer
@@ -163,41 +185,65 @@ where
   });
 
   // the processor thread
-  tokio::spawn(async move {
-    loop {
-      tokio::select! {
-        // enable `biased` to make sure we always try to recv from buffer before accept the server thread checker
-        biased;
+  {
+    let checker_tx = checker_tx.clone();
+    tokio::spawn(async move {
+      loop {
+        tokio::select! {
+          // enable `biased` to make sure we always try to recv from buffer before accept the server thread checker
+          biased;
 
-        res = buffer_rx.recv() => {
-          let (line, timestamp) = res.unwrap();
-          if processor.process(line, timestamp).await {
-            // only flush if the line is written to the sink
-            // TODO: do we need to flush every time? or only flush in the next branch on the server thread checker?
-            // we flush here to ensure the logs are written as soon as possible
-            processor.flush().await;
+          res = buffer_rx.recv() => {
+            let (line, timestamp) = res.unwrap();
+            if processor.process(line, timestamp).await {
+              // only flush if the line is written to the sink
+              // TODO: do we need to flush every time? or only flush in the next branch on the server thread checker?
+              // we flush here to ensure the logs are written as soon as possible
+              processor.flush().await;
+            }
+          }
+          // the server thread requests to check if the processor has finished processing the logs.
+          checker = checker_rx.recv() => {
+            // since we are using `biased` select, we don't need to check if there is a message in the buffer,
+            // just stop suppressing the server thread if the branch is executed
+            // unless there is a suppression_timeout_ms set
+            let checker = checker.unwrap();
+            if suppression_timeout_ms != 0 && !checker.delayed {
+              let checker_tx = checker_tx.clone();
+              // don't sleep in the branch which will block the processing of buffer,
+              // spawn a new task to sleep.
+              tokio::spawn(async move {
+                sleep(Duration::from_millis(suppression_timeout_ms as u64)).await;
+                // after sleep, we still send a checker instead of directly sending the ack
+                // so that the biased select will always try to receive from buffer first
+                checker_tx.send(Checker {
+                  ack_tx: checker.ack_tx,
+                  delayed: true,
+                }).await.unwrap();
+              });
+            } else {
+              checker.ack_tx.send(()).unwrap();
+            }
           }
         }
-        // the server thread requests to check if the processor has finished processing the logs.
-        ack_tx = checker_rx.recv() => {
-          // since we are using `biased` select, we don't need to check if there is a message in the buffer,
-          // just stop suppressing the server thread if the branch is executed
-          ack_tx.unwrap().send(()).unwrap();
-        }
       }
-    }
-  });
+    });
+  }
 
   checker_tx
 }
 
-async fn send_checker(
-  checker_tx: &Option<mpsc::Sender<oneshot::Sender<()>>>,
-) -> Option<oneshot::Receiver<()>> {
+async fn send_checker(checker_tx: &Option<mpsc::Sender<Checker>>) -> Option<oneshot::Receiver<()>> {
   match checker_tx {
     Some(checker_tx) => {
       let (ack_tx, ack_rx) = oneshot::channel();
-      checker_tx.send(ack_tx).await.unwrap();
+      checker_tx
+        .send(Checker {
+          ack_tx,
+          delayed: false,
+        })
+        .await
+        .unwrap();
       Some(ack_rx)
     }
     None => None,
@@ -208,6 +254,11 @@ async fn wait_for_ack(ack_rx: Option<oneshot::Receiver<()>>) {
   if let Some(ack_rx) = ack_rx {
     ack_rx.await.unwrap();
   }
+}
+
+struct Checker {
+  ack_tx: oneshot::Sender<()>,
+  delayed: bool,
 }
 
 #[cfg(test)]
