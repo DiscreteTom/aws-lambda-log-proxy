@@ -11,6 +11,7 @@
 - Fix: ignore empty lines before passed to processor.
 - Fix: apply tokio biased select to ensure logs are processed before the next invocation.
 - Perf: reduce async write calls.
+- Perf: apply AWS Lambda Runtime Proxy v0.2.1.
 
 ## v0.1.1
 
