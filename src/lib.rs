@@ -187,6 +187,7 @@ where
   // the processor thread
   {
     let checker_tx = checker_tx.clone();
+    let mut init = true;
     tokio::spawn(async move {
       loop {
         tokio::select! {
@@ -208,7 +209,7 @@ where
             // just stop suppressing the server thread if the branch is executed
             // unless there is a suppression_timeout_ms set
             let checker = checker.unwrap();
-            if suppression_timeout_ms != 0 && !checker.delayed {
+            if suppression_timeout_ms != 0 && !checker.delayed && !init {
               let checker_tx = checker_tx.clone();
               // don't sleep in the branch which will block the processing of buffer,
               // spawn a new task to sleep.
@@ -223,6 +224,7 @@ where
               });
             } else {
               checker.ack_tx.send(()).unwrap();
+              init = false;
             }
           }
         }
