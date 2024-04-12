@@ -134,7 +134,7 @@ impl LogProxy {
           let is_handler_response =
             path.starts_with("/2018-06-01/runtime/invocation/") && path.ends_with("/response");
 
-          if req.uri().path() == "/2018-06-01/runtime/invocation/next" {
+          if path == "/2018-06-01/runtime/invocation/next" {
             // in lambda, send `invocation/next` will freeze current execution environment,
             // unprocessed logs might be lost,
             // so before proceeding, wait for the processors to finish processing the logs
@@ -148,6 +148,7 @@ impl LogProxy {
             wait_for_ack(stderr_ack_rx.await).await;
           }
 
+          // forward the request to the real lambda runtime API, consume the request
           let res = LambdaRuntimeApiClient::forward(req).await;
 
           if is_handler_response && suppression_timeout_ms > 0 {
