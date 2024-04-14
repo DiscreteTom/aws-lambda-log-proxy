@@ -9,18 +9,18 @@ use tokio::{
   sync::{mpsc, oneshot},
 };
 
-pub struct LogProxy {
+pub struct LogProxy<StdoutProcessor: Processor, StderrProcessor: Processor> {
   /// See [`Self::stdout`].
-  pub stdout: Option<Processor>,
+  pub stdout: Option<StdoutProcessor>,
   /// See [`Self::stderr`].
-  pub stderr: Option<Processor>,
+  pub stderr: Option<StderrProcessor>,
   /// See [`Self::buffer_size`].
   pub buffer_size: usize,
   /// See [`Self::disable_lambda_telemetry_log_fd_for_handler`].
   pub disable_lambda_telemetry_log_fd_for_handler: bool,
 }
 
-impl Default for LogProxy {
+impl Default for LogProxy<(), ()> {
   fn default() -> Self {
     Self {
       stdout: None,
@@ -31,7 +31,9 @@ impl Default for LogProxy {
   }
 }
 
-impl LogProxy {
+impl<StdoutProcessor: Processor, StderrProcessor: Processor>
+  LogProxy<StdoutProcessor, StderrProcessor>
+{
   /// Set the processor for `stdout`.
   /// By default there is no processor for `stdout`.
   /// # Examples
@@ -41,23 +43,37 @@ impl LogProxy {
   /// let sink = Sink::stdout();
   /// LogProxy::default().stdout(|p| p.sink(sink));
   /// ```
-  pub fn stdout(mut self, builder: impl FnOnce(ProcessorBuilder) -> Processor) -> Self {
-    self.stdout = Some(builder(ProcessorBuilder::default()));
-    self
+  pub fn stdout(
+    self,
+    builder: impl FnOnce(SimpleProcessorBuilder) -> SimpleProcessor,
+  ) -> LogProxy<SimpleProcessor, StderrProcessor> {
+    LogProxy {
+      stdout: Some(builder(SimpleProcessorBuilder::default())),
+      stderr: self.stderr,
+      buffer_size: self.buffer_size,
+      disable_lambda_telemetry_log_fd_for_handler: self.disable_lambda_telemetry_log_fd_for_handler,
+    }
   }
 
-  /// Set the processor for `stderr`.
-  /// By default there is no processor for `stderr`.
-  /// # Examples
-  /// ```
-  /// use aws_lambda_log_proxy::{LogProxy, Sink};
-  ///
-  /// let sink = Sink::stdout();
-  /// LogProxy::default().stderr(|p| p.sink(sink));
-  /// ```
-  pub fn stderr(mut self, builder: impl FnOnce(ProcessorBuilder) -> Processor) -> Self {
-    self.stderr = Some(builder(ProcessorBuilder::default()));
-    self
+  // /// Set the processor for `stderr`.
+  // /// By default there is no processor for `stderr`.
+  // /// # Examples
+  // /// ```
+  // /// use aws_lambda_log_proxy::{LogProxy, Sink};
+  // ///
+  // /// let sink = Sink::stdout();
+  // /// LogProxy::default().stderr(|p| p.sink(sink));
+  // /// ```
+  pub fn stderr(
+    self,
+    builder: impl FnOnce(SimpleProcessorBuilder) -> SimpleProcessor,
+  ) -> LogProxy<StdoutProcessor, SimpleProcessor> {
+    LogProxy {
+      stdout: self.stdout,
+      stderr: Some(builder(SimpleProcessorBuilder::default())),
+      buffer_size: self.buffer_size,
+      disable_lambda_telemetry_log_fd_for_handler: self.disable_lambda_telemetry_log_fd_for_handler,
+    }
   }
 
   /// Set how many lines can be buffered if the processing is slow.
@@ -136,13 +152,13 @@ impl LogProxy {
   }
 }
 
-fn spawn_reader<T: AsyncRead + Send + 'static>(
-  file: T,
-  mut processor: Processor,
+fn spawn_reader<F: AsyncRead + Send + 'static, P: Processor + 'static>(
+  file: F,
+  mut processor: P,
   buffer_size: usize,
 ) -> mpsc::Sender<Checker>
 where
-  BufReader<T>: Unpin,
+  BufReader<F>: Unpin,
 {
   let (checker_tx, mut checker_rx) = mpsc::channel::<Checker>(1);
   let (buffer_tx, mut buffer_rx) = mpsc::channel(buffer_size);

@@ -1,19 +1,19 @@
-use crate::{Processor, Sink};
+use crate::{SimpleProcessor, Sink};
 
-pub struct ProcessorBuilder {
+pub struct SimpleProcessorBuilder {
   /// See [`Self::transformer`].
   pub transformer: Box<dyn FnMut(String) -> Option<String> + Send>,
 }
 
-impl Default for ProcessorBuilder {
+impl Default for SimpleProcessorBuilder {
   fn default() -> Self {
-    ProcessorBuilder {
+    SimpleProcessorBuilder {
       transformer: Box::new(|s| Some(s)),
     }
   }
 }
 
-impl ProcessorBuilder {
+impl SimpleProcessorBuilder {
   /// Set the log line transformer.
   /// If the transformer returns [`None`], the line will be ignored.
   /// The default transformer will return the input line as is.
@@ -37,8 +37,8 @@ impl ProcessorBuilder {
   }
 
   /// Create a new [`Processor`] with the given `sink` and [`Self::transformer`].
-  pub fn sink(self, sink: Sink) -> Processor {
-    Processor {
+  pub fn sink(self, sink: Sink) -> SimpleProcessor {
+    SimpleProcessor {
       transformer: self.transformer,
       sink,
     }
@@ -52,7 +52,7 @@ mod tests {
   #[test]
   fn default_transformer() {
     let text = "test".to_string();
-    let mut processor = ProcessorBuilder::default();
+    let mut processor = SimpleProcessorBuilder::default();
     let transformed = (processor.transformer)(text.clone());
     // default transformer should return the input line as is
     assert_eq!(transformed, Some(text));
@@ -61,12 +61,12 @@ mod tests {
   #[test]
   fn ignore_filter() {
     let text = "test".to_string();
-    let mut processor = ProcessorBuilder::default().ignore(|_| true);
+    let mut processor = SimpleProcessorBuilder::default().ignore(|_| true);
     let transformed = (processor.transformer)(text.clone());
     // ignore filter should return None
     assert_eq!(transformed, None);
 
-    let mut processor = ProcessorBuilder::default().ignore(|_| false);
+    let mut processor = SimpleProcessorBuilder::default().ignore(|_| false);
     let transformed = (processor.transformer)(text.clone());
     // ignore filter should return the input line as is
     assert_eq!(transformed, Some(text));
@@ -75,12 +75,12 @@ mod tests {
   #[test]
   fn filter_filter() {
     let text = "test".to_string();
-    let mut processor = ProcessorBuilder::default().filter(|_| false);
+    let mut processor = SimpleProcessorBuilder::default().filter(|_| false);
     let transformed = (processor.transformer)(text.clone());
     // filter filter should return None
     assert_eq!(transformed, None);
 
-    let mut processor = ProcessorBuilder::default().filter(|_| true);
+    let mut processor = SimpleProcessorBuilder::default().filter(|_| true);
     let transformed = (processor.transformer)(text.clone());
     // filter filter should return the input line as is
     assert_eq!(transformed, Some(text));
