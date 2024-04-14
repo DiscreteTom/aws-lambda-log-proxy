@@ -5,7 +5,8 @@
 - **_Breaking Change_**: rename `LogProxy.disable_lambda_telemetry_log_fd` to `LogProxy.disable_lambda_telemetry_log_fd_for_handler`.
 - **_Breaking Change_**: `Sink::write_line` and `Processor::process` need a timestamp as the second argument.
 - Feat: add `LogProxy::buffer_size`, store lines in a buffer and record the in-buffer timestamp.
-- Feat: add `LogProxy::suppression_timeout_ms` to customize the suppression timeout.
+- ~~Feat: add `LogProxy::suppression_timeout_ms` to customize the suppression timeout.~~
+  - Removed since it's not working for some runtime (e.g. NodeJS). The handler process might be blocked when runtime API response is suppressed, thus there is no new log lines passed to the log proxy.
 - Feat: implement `Default` for `OutputFormat`.
 - Feat: `Processor.process` will return whether the line is written to the sink.
 - Fix: remove `'\r'` in line endings before passed to processor.

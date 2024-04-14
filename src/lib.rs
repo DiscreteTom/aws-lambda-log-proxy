@@ -3,11 +3,10 @@ mod processor;
 pub use processor::*;
 
 use aws_lambda_runtime_proxy::{LambdaRuntimeApiClient, Proxy};
-use std::{process::Stdio, time::Duration};
+use std::process::Stdio;
 use tokio::{
   io::{AsyncBufReadExt, AsyncRead, BufReader},
   sync::{mpsc, oneshot},
-  time::sleep,
 };
 
 pub struct LogProxy {
@@ -17,8 +16,6 @@ pub struct LogProxy {
   pub stderr: Option<Processor>,
   /// See [`Self::buffer_size`].
   pub buffer_size: usize,
-  /// See [`Self::suppression_timeout`].
-  pub suppression_timeout_ms: u64,
   /// See [`Self::disable_lambda_telemetry_log_fd_for_handler`].
   pub disable_lambda_telemetry_log_fd_for_handler: bool,
 }
@@ -29,7 +26,6 @@ impl Default for LogProxy {
       stdout: None,
       stderr: None,
       buffer_size: 256,
-      suppression_timeout_ms: 0,
       disable_lambda_telemetry_log_fd_for_handler: false,
     }
   }
@@ -75,17 +71,6 @@ impl LogProxy {
     self
   }
 
-  /// Set the timeout for the suppression of `invocation/next`.
-  /// This value won't affect the functions response time, for example if your
-  /// handler function returns in 10ms and the suppression timeout is set to 5000ms,
-  /// the synchronous invoker like API Gateway will get the response in 10ms,
-  /// but the lambda function will keep running for 5000ms to process the logs.
-  /// The default value is `0`.
-  pub fn suppression_timeout_ms(mut self, ms: u64) -> Self {
-    self.suppression_timeout_ms = ms;
-    self
-  }
-
   /// Remove the `_LAMBDA_TELEMETRY_LOG_FD` environment variable for the handler process
   /// to prevent logs from being written to other file descriptors.
   pub fn disable_lambda_telemetry_log_fd_for_handler(mut self, disable: bool) -> Self {
@@ -123,18 +108,13 @@ impl LogProxy {
       .take()
       .map(|file| spawn_reader(file, self.stderr.unwrap(), self.buffer_size));
 
-    let suppression_timeout_ms = self.suppression_timeout_ms;
     proxy
       .server
       .serve(move |req| {
         let stdout_checker_tx = stdout_checker_tx.clone();
         let stderr_checker_tx = stderr_checker_tx.clone();
         async move {
-          let path = req.uri().path();
-          let is_handler_response =
-            path.starts_with("/2018-06-01/runtime/invocation/") && path.ends_with("/response");
-
-          if path == "/2018-06-01/runtime/invocation/next" {
+          if req.uri().path() == "/2018-06-01/runtime/invocation/next" {
             // in lambda, send `invocation/next` will freeze current execution environment,
             // unprocessed logs might be lost,
             // so before proceeding, wait for the processors to finish processing the logs
@@ -149,13 +129,7 @@ impl LogProxy {
           }
 
           // forward the request to the real lambda runtime API, consume the request
-          let res = LambdaRuntimeApiClient::forward(req).await;
-
-          if is_handler_response && suppression_timeout_ms > 0 {
-            sleep(Duration::from_millis(suppression_timeout_ms)).await;
-          }
-
-          res
+          LambdaRuntimeApiClient::forward(req).await
         }
       })
       .await
