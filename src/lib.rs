@@ -9,10 +9,38 @@ use tokio::{
   sync::{mpsc, oneshot},
 };
 
-pub struct LogProxy<StdoutProcessor: Processor, StderrProcessor: Processor> {
-  /// See [`Self::stdout`].
+/// # Examples
+/// Simple creation:
+/// ```
+/// use aws_lambda_log_proxy::{LogProxy, Sink};
+///
+/// LogProxy::new().stdout(|p| p.sink(Sink::stdout()));
+/// ```
+/// Custom creation:
+/// ```
+/// use aws_lambda_log_proxy::{LogProxy, Processor};
+///
+/// pub struct MyProcessor;
+///
+/// impl Processor for MyProcessor {
+///   async fn process(&mut self, _line: String, _timestamp: i64) -> bool {
+///     false
+///   }
+///
+///   async fn flush(&mut self) {}
+/// }
+///
+/// let proxy: LogProxy<_, ()> = LogProxy {
+///   stdout: Some(MyProcessor),
+///   ..Default::default()
+/// };
+/// ```
+pub struct LogProxy<StdoutProcessor, StderrProcessor> {
+  /// The processor for the handler process's `stdout`.
+  /// Defaults to [`None`].
   pub stdout: Option<StdoutProcessor>,
-  /// See [`Self::stderr`].
+  /// The processor for the handler process's `stderr`.
+  /// Defaults to [`None`].
   pub stderr: Option<StderrProcessor>,
   /// See [`Self::buffer_size`].
   pub buffer_size: usize,
@@ -20,7 +48,7 @@ pub struct LogProxy<StdoutProcessor: Processor, StderrProcessor: Processor> {
   pub disable_lambda_telemetry_log_fd_for_handler: bool,
 }
 
-impl Default for LogProxy<(), ()> {
+impl<StdoutProcessor, StderrProcessor> Default for LogProxy<StdoutProcessor, StderrProcessor> {
   fn default() -> Self {
     Self {
       stdout: None,
@@ -31,17 +59,21 @@ impl Default for LogProxy<(), ()> {
   }
 }
 
-impl<StdoutProcessor: Processor, StderrProcessor: Processor>
-  LogProxy<StdoutProcessor, StderrProcessor>
-{
-  /// Set the processor for `stdout`.
-  /// By default there is no processor for `stdout`.
+impl LogProxy<(), ()> {
+  /// Create a new `LogProxy<(), ()>` with default settings.
+  pub fn new() -> Self {
+    Self::default()
+  }
+}
+
+impl<StdoutProcessor, StderrProcessor> LogProxy<StdoutProcessor, StderrProcessor> {
+  /// Set [`Self::stdout`] to a [`SimpleProcessor`] via [`SimpleProcessorBuilder`].
   /// # Examples
   /// ```
   /// use aws_lambda_log_proxy::{LogProxy, Sink};
   ///
   /// let sink = Sink::stdout();
-  /// LogProxy::default().stdout(|p| p.sink(sink));
+  /// LogProxy::new().stdout(|p| p.sink(sink));
   /// ```
   pub fn stdout(
     self,
@@ -55,15 +87,14 @@ impl<StdoutProcessor: Processor, StderrProcessor: Processor>
     }
   }
 
-  // /// Set the processor for `stderr`.
-  // /// By default there is no processor for `stderr`.
-  // /// # Examples
-  // /// ```
-  // /// use aws_lambda_log_proxy::{LogProxy, Sink};
-  // ///
-  // /// let sink = Sink::stdout();
-  // /// LogProxy::default().stderr(|p| p.sink(sink));
-  // /// ```
+  /// Set [`Self::stderr`] to a [`SimpleProcessor`] via [`SimpleProcessorBuilder`].
+  /// # Examples
+  /// ```
+  /// use aws_lambda_log_proxy::{LogProxy, Sink};
+  ///
+  /// let sink = Sink::stdout();
+  /// LogProxy::new().stderr(|p| p.sink(sink));
+  /// ```
   pub fn stderr(
     self,
     builder: impl FnOnce(SimpleProcessorBuilder) -> SimpleProcessor,
@@ -96,7 +127,11 @@ impl<StdoutProcessor: Processor, StderrProcessor: Processor>
 
   /// Start the log proxy.
   /// This will block the current thread.
-  pub async fn start(self) {
+  pub async fn start(self)
+  where
+    StdoutProcessor: Processor,
+    StderrProcessor: Processor,
+  {
     let mut command = Proxy::default_command();
 
     // only pipe if there is a processor
@@ -236,7 +271,7 @@ mod tests {
 
   #[test]
   fn test_log_proxy_default() {
-    let proxy = LogProxy::default();
+    let proxy = LogProxy::new();
     assert!(proxy.stdout.is_none());
     assert!(proxy.stderr.is_none());
     assert_eq!(proxy.buffer_size, 256);
@@ -246,7 +281,7 @@ mod tests {
   #[test]
   fn test_log_proxy_stdout() {
     let sink = Sink::stdout();
-    let proxy = LogProxy::default().stdout(|p| p.sink(sink));
+    let proxy = LogProxy::new().stdout(|p| p.sink(sink));
     assert!(proxy.stdout.is_some());
     assert!(proxy.stderr.is_none());
     assert_eq!(proxy.buffer_size, 256);
@@ -256,7 +291,7 @@ mod tests {
   #[test]
   fn test_log_proxy_stderr() {
     let sink = Sink::stdout();
-    let proxy = LogProxy::default().stderr(|p| p.sink(sink));
+    let proxy = LogProxy::new().stderr(|p| p.sink(sink));
     assert!(proxy.stdout.is_none());
     assert!(proxy.stderr.is_some());
     assert_eq!(proxy.buffer_size, 256);
@@ -265,13 +300,13 @@ mod tests {
 
   #[test]
   fn test_log_proxy_buffer_size() {
-    let proxy = LogProxy::default().buffer_size(512);
+    let proxy = LogProxy::new().buffer_size(512);
     assert_eq!(proxy.buffer_size, 512);
   }
 
   #[test]
   fn test_log_proxy_disable_lambda_telemetry_log_fd() {
-    let proxy = LogProxy::default().disable_lambda_telemetry_log_fd_for_handler(true);
+    let proxy = LogProxy::new().disable_lambda_telemetry_log_fd_for_handler(true);
     assert!(proxy.stdout.is_none());
     assert!(proxy.stderr.is_none());
     assert_eq!(proxy.buffer_size, 256);

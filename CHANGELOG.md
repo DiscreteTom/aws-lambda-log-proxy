@@ -6,6 +6,7 @@
 - **_Breaking Change_**: rename `Processor` and `ProcessorBuilder` into `SimpleProcessor` and `SimpleProcessorBuilder`.
 - **_Breaking Change_**: add trait `Processor`, make `LogProxy` generic.
 - **_Breaking Change_**: `Sink::write_line` and `Processor::process` need a timestamp as the second argument.
+- Feat: add `LogProxy::new`.
 - Feat: add `LogProxy::buffer_size`, store lines in a buffer and record the in-buffer timestamp.
 - ~~Feat: add `LogProxy::suppression_timeout_ms` to customize the suppression timeout.~~
   - Removed since it's not working for some runtime (e.g. NodeJS). The handler process might be blocked when runtime API response is suppressed, thus there is no new log lines passed to the log proxy.
