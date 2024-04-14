@@ -2,7 +2,7 @@ use crate::{Processor, Sink};
 
 /// Process log lines with [`Self::transformer`]
 /// and write them to [`Self::sink`].
-/// To create this, use [`ProcessorBuilder::sink`].
+/// To create this, use [`SimpleProcessorBuilder::sink`](crate::SimpleProcessorBuilder::sink).
 pub struct SimpleProcessor {
   /// See [`ProcessorBuilder::transformer`].
   pub transformer: Box<dyn FnMut(String) -> Option<String> + Send>,
@@ -11,10 +11,6 @@ pub struct SimpleProcessor {
 }
 
 impl Processor for SimpleProcessor {
-  /// Process a log line with [`Self::transformer`] and write it to [`Self::sink`].
-  /// `'\n'` will be appended to `line`.
-  /// Return `true` if the line is written to the sink (maybe an empty line).
-  /// Return `false` if the line is ignored.
   async fn process(&mut self, line: String, timestamp: i64) -> bool {
     if let Some(transformed) = (self.transformer)(line) {
       self.sink.write_line(transformed, timestamp).await;
@@ -24,7 +20,6 @@ impl Processor for SimpleProcessor {
     }
   }
 
-  /// Flush [`Self::sink`].
   async fn flush(&mut self) {
     self.sink.flush().await;
   }

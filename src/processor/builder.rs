@@ -36,7 +36,7 @@ impl SimpleProcessorBuilder {
     self.ignore(move |line| !filter(line))
   }
 
-  /// Create a new [`Processor`] with the given `sink` and [`Self::transformer`].
+  /// Create a new [`SimpleProcessor`] with the given `sink` and [`Self::transformer`].
   pub fn sink(self, sink: Sink) -> SimpleProcessor {
     SimpleProcessor {
       transformer: self.transformer,
