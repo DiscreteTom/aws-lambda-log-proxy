@@ -59,8 +59,8 @@ impl<StdoutProcessor, StderrProcessor> Default for LogProxy<StdoutProcessor, Std
   }
 }
 
-impl LogProxy<(), ()> {
-  /// Create a new `LogProxy<(), ()>` with default settings.
+impl LogProxy<MockProcessor, MockProcessor> {
+  /// Create a new [`LogProxy`] with default settings.
   pub fn new() -> Self {
     Self::default()
   }
