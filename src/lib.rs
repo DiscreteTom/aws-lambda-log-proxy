@@ -312,4 +312,16 @@ mod tests {
     assert_eq!(proxy.buffer_size, 256);
     assert!(proxy.disable_lambda_telemetry_log_fd_for_handler);
   }
+
+  // this is to check if the `start` can be called with different processors during the compile time
+  // so don't run this test
+  async fn _ensure_start_can_be_called() {
+    // mock processor
+    let proxy: LogProxy<MockProcessor, MockProcessor> = LogProxy::new();
+    proxy.start().await;
+    let proxy: LogProxy<SimpleProcessor, SimpleProcessor> = LogProxy::new()
+      .stdout(|p| p.sink(Sink::stdout()))
+      .stderr(|p| p.sink(Sink::stdout()));
+    proxy.start().await;
+  }
 }
