@@ -416,6 +416,8 @@ mod tests {
     });
     let ack_tx = checker_rx.recv().await.unwrap();
     ack_tx.ack_tx.send(()).unwrap();
+
+    assert!(matches!(send_checker(&None).await, None));
   }
 
   // this is to check if the `start` can be called with different processors during the compile time
