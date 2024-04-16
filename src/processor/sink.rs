@@ -197,7 +197,7 @@ mod tests {
 
   #[cfg(target_os = "linux")]
   #[test]
-  fn sink_builder_lambda_telemetry_log_fd() {
+  fn sink_lambda_telemetry_log_fd() {
     std::env::set_var("_LAMBDA_TELEMETRY_LOG_FD", "1");
     let sink = Sink::lambda_telemetry_log_fd().unwrap();
     assert_eq!(sink.format, OutputFormat::TelemetryLogFd);
