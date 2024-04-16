@@ -228,6 +228,8 @@ where
 
   // the processor thread
   tokio::spawn(async move {
+    let mut need_flush = false;
+
     loop {
       tokio::select! {
         // enable `biased` to make sure we always try to recv from buffer before accept the server thread checker
@@ -235,17 +237,21 @@ where
 
         res = buffer_rx.recv() => {
           let (line, timestamp) = res.unwrap();
-          if processor.process(line, timestamp).await {
-            // only flush if the line is written to the sink
-            // TODO: do we need to flush every time? or only flush in the next branch on the server thread checker?
-            // we flush here to ensure the logs are written as soon as possible
-            processor.flush().await;
-          }
+          need_flush = need_flush || processor.process(line, timestamp).await;
+          // we don't need to flush here.
+          // if we are writing to stdout, it is already line-buffered and will flush by line.
+          // if we are writing to telemetry log fd, timestamp is appended so we don't need to flush it immediately.
         }
         // the server thread requests to check if the processor has finished processing the logs.
         checker = checker_rx.recv() => {
           // since we are using `biased` select, we don't need to check if there is a message in the buffer,
           // just stop suppressing the server thread if the branch is executed
+
+          if need_flush {
+            processor.flush().await;
+            need_flush = false;
+          }
+
           checker.unwrap().ack_tx.send(()).unwrap();
         }
       }

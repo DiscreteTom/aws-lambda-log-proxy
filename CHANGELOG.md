@@ -20,7 +20,7 @@
 - Fix: remove `'\r'` in line endings before passed to processor.
 - Fix: ignore empty lines before passed to processor.
 - Fix: apply tokio biased select to ensure logs are processed before the next invocation.
-- Perf: reduce async write calls.
+- Perf: reduce async write calls and flush calls.
 - Perf: apply AWS Lambda Runtime Proxy v0.2.1.
 
 ## v0.1.1
