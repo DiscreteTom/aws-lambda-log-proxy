@@ -35,6 +35,7 @@ mod tests {
     let sink = Sink::new(tokio_test::io::Builder::new().write(b"hello\n").build()).spawn();
     let mut processor = SimpleProcessorBuilder::default().sink(sink);
     processor.process("hello".to_string(), 0).await;
+    processor.flush().await;
   }
 
   #[tokio::test]
@@ -51,5 +52,6 @@ mod tests {
       .sink(sink);
     processor.process("hello".to_string(), 0).await;
     processor.process("world".to_string(), 0).await;
+    processor.flush().await;
   }
 }

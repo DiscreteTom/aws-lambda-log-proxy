@@ -198,6 +198,12 @@ mod tests {
     assert_eq!(sink.format, OutputFormat::TelemetryLogFd);
   }
 
+  #[test]
+  fn sink_buffer_size() {
+    let sink = Sink::stdout().buffer_size(32);
+    assert_eq!(sink.buffer_size, 32);
+  }
+
   #[cfg(target_os = "linux")]
   #[test]
   fn sink_lambda_telemetry_log_fd() {
@@ -241,6 +247,13 @@ mod tests {
     .spawn()
     .write_line("hello".to_string(), 0)
     .await;
+  }
+
+  #[tokio::test]
+  async fn sink_flush() {
+    let sink = Sink::new(tokio_test::io::Builder::new().write(b"hello\n").build()).spawn();
+    sink.write_line("hello".to_string(), 0).await;
+    sink.flush().await;
   }
 
   #[tokio::test]
