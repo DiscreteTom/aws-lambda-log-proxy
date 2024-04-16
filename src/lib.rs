@@ -295,8 +295,8 @@ mod tests {
     assert!(!proxy.disable_lambda_telemetry_log_fd_for_handler);
   }
 
-  #[test]
-  fn test_log_proxy_stdout() {
+  #[tokio::test]
+  async fn test_log_proxy_stdout() {
     let sink = Sink::stdout().spawn();
     let proxy = LogProxy::new().stdout(|p| p.sink(sink));
     assert!(proxy.stdout.is_some());
@@ -305,8 +305,8 @@ mod tests {
     assert!(!proxy.disable_lambda_telemetry_log_fd_for_handler);
   }
 
-  #[test]
-  fn test_log_proxy_stderr() {
+  #[tokio::test]
+  async fn test_log_proxy_stderr() {
     let sink = Sink::stdout().spawn();
     let proxy = LogProxy::new().stderr(|p| p.sink(sink));
     assert!(proxy.stdout.is_none());
