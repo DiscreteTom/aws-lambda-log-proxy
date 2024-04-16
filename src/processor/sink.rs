@@ -21,8 +21,11 @@ pub enum OutputFormat {
 /// ```
 /// use aws_lambda_log_proxy::{Sink, SinkHandle};
 ///
-/// let sink: SinkHandle = Sink::stdout().spawn();
-/// let sink2 = sink.clone();
+/// #[tokio::main]
+/// async fn main() {
+///   let sink: SinkHandle = Sink::stdout().spawn();
+///   let sink2 = sink.clone();
+/// }
 /// ```
 pub struct Sink<T: AsyncWrite + Send + Unpin + 'static> {
   writer: T,
