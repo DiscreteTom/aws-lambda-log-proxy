@@ -1,0 +1,46 @@
+# to deploy, run the following script in the root folder
+# cargo build --examples --release && mkdir -p layer && cp benchmark/scripts/entry.sh layer && cp target/release/examples/suppress layer && cd examples && sam build -t suppress.yaml && sam deploy -t suppress.yaml --stack-name SuppressedLambdaLogProxyTest && cd ..
+
+# to clean up, run the following script in the root folder
+# cd examples && sam delete --stack-name SuppressedLambdaLogProxyTest -t suppress.yaml
+
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+
+Resources:
+  SuppressedLambdaLogProxyLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      ContentUri: layer/
+      CompatibleArchitectures:
+        - x86_64
+  SuppressedLambdaLogProxyFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      Runtime: nodejs20.x
+      InlineCode: |
+        exports.handler = async function(event) {
+          process.stdout.write(`hello\n`);
+          return {
+            statusCode: 200,
+            body: "hello"
+          }
+        };
+      MemorySize: 1024
+      Timeout: 30
+      Layers:
+        - !Ref SuppressedLambdaLogProxyLayer
+      Environment:
+        Variables:
+          AWS_LAMBDA_EXEC_WRAPPER: /opt/entry.sh
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /10/enabled
+            Method: get
+
+Outputs:
+  API:
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
