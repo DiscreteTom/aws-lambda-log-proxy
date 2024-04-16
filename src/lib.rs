@@ -14,7 +14,12 @@ use tokio::{
 /// ```
 /// use aws_lambda_log_proxy::{LogProxy, Sink};
 ///
-/// LogProxy::new().stdout(|p| p.sink(Sink::stdout()));
+/// #[tokio::main]
+/// async fn main() {
+///   let proxy = LogProxy::new().stdout(|p| p.sink(Sink::stdout().spawn()));
+///   // start the proxy
+///   // proxy.start().await;
+/// }
 /// ```
 /// Custom creation:
 /// ```
@@ -72,8 +77,11 @@ impl<StdoutProcessor, StderrProcessor> LogProxy<StdoutProcessor, StderrProcessor
   /// ```
   /// use aws_lambda_log_proxy::{LogProxy, Sink};
   ///
-  /// let sink = Sink::stdout();
-  /// LogProxy::new().stdout(|p| p.sink(sink));
+  /// #[tokio::main]
+  /// async fn main() {
+  ///   let sink = Sink::stdout().spawn();
+  ///   LogProxy::new().stdout(|p| p.sink(sink));
+  /// }
   /// ```
   pub fn stdout(
     self,
@@ -92,8 +100,11 @@ impl<StdoutProcessor, StderrProcessor> LogProxy<StdoutProcessor, StderrProcessor
   /// ```
   /// use aws_lambda_log_proxy::{LogProxy, Sink};
   ///
-  /// let sink = Sink::stdout();
-  /// LogProxy::new().stderr(|p| p.sink(sink));
+  /// #[tokio::main]
+  /// async fn main() {
+  ///   let sink = Sink::stdout().spawn();
+  ///   LogProxy::new().stderr(|p| p.sink(sink));
+  /// }
   /// ```
   pub fn stderr(
     self,
@@ -280,7 +291,7 @@ mod tests {
 
   #[test]
   fn test_log_proxy_stdout() {
-    let sink = Sink::stdout();
+    let sink = Sink::stdout().spawn();
     let proxy = LogProxy::new().stdout(|p| p.sink(sink));
     assert!(proxy.stdout.is_some());
     assert!(proxy.stderr.is_none());
@@ -290,7 +301,7 @@ mod tests {
 
   #[test]
   fn test_log_proxy_stderr() {
-    let sink = Sink::stdout();
+    let sink = Sink::stdout().spawn();
     let proxy = LogProxy::new().stderr(|p| p.sink(sink));
     assert!(proxy.stdout.is_none());
     assert!(proxy.stderr.is_some());
@@ -319,9 +330,10 @@ mod tests {
     // mock processor
     let proxy: LogProxy<MockProcessor, MockProcessor> = LogProxy::new();
     proxy.start().await;
+    let sink = Sink::stdout().spawn();
     let proxy: LogProxy<SimpleProcessor, SimpleProcessor> = LogProxy::new()
-      .stdout(|p| p.sink(Sink::stdout()))
-      .stderr(|p| p.sink(Sink::stdout()));
+      .stdout(|p| p.sink(sink.clone()))
+      .stderr(|p| p.sink(sink));
     proxy.start().await;
   }
 }

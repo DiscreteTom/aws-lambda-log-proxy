@@ -1,4 +1,4 @@
-use crate::{SimpleProcessor, Sink};
+use crate::{SimpleProcessor, SinkHandle};
 
 pub struct SimpleProcessorBuilder {
   /// See [`Self::transformer`].
@@ -37,7 +37,7 @@ impl SimpleProcessorBuilder {
   }
 
   /// Create a new [`SimpleProcessor`] with the given `sink` and [`Self::transformer`].
-  pub fn sink(self, sink: Sink) -> SimpleProcessor {
+  pub fn sink(self, sink: SinkHandle) -> SimpleProcessor {
     SimpleProcessor {
       transformer: self.transformer,
       sink,

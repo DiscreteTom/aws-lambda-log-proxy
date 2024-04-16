@@ -1,7 +1,6 @@
-use std::sync::Arc;
 use tokio::{
-  io::{AsyncWrite, AsyncWriteExt},
-  sync::Mutex,
+  io::{AsyncWrite, AsyncWriteExt, Stderr, Stdout},
+  sync::{mpsc, oneshot},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -16,38 +15,29 @@ pub enum OutputFormat {
 
 /// A sink to write log lines to.
 /// # Caveats
-/// To prevent interleaved output, you should clone a sink
+/// To prevent interleaved output, you should clone a [`SinkHandle`]
 /// instead of creating a new one if you want to write to the same sink.
 /// # Examples
 /// ```
-/// use aws_lambda_log_proxy::Sink;
+/// use aws_lambda_log_proxy::{Sink, SinkHandle};
 ///
-/// let sink = Sink::stdout();
+/// let sink: SinkHandle = Sink::stdout().spawn();
+/// let sink2 = sink.clone();
 /// ```
-#[derive(Clone)]
-pub struct Sink {
-  // use arc mutex to prevent interleaved output
-  writer: Arc<Mutex<dyn AsyncWrite + Send + Unpin>>,
+pub struct Sink<T: AsyncWrite + Send + Unpin + 'static> {
+  writer: T,
   format: OutputFormat,
+  buffer_size: usize,
 }
 
-impl Sink {
+impl<T: AsyncWrite + Send + Unpin + 'static> Sink<T> {
   /// Create a new [`Standard`](OutputFormat::Standard) sink from an [`AsyncWrite`] implementor.
-  pub fn new(s: impl AsyncWrite + Send + Unpin + 'static) -> Self {
+  pub fn new(writer: T) -> Self {
     Sink {
-      writer: Arc::new(Mutex::new(s)),
+      writer,
       format: OutputFormat::Standard,
+      buffer_size: 16,
     }
-  }
-
-  /// Create a new [`stdout`](tokio::io::stdout) sink.
-  pub fn stdout() -> Self {
-    Sink::new(tokio::io::stdout())
-  }
-
-  /// Create a new [`stderr`](tokio::io::stderr) sink.
-  pub fn stderr() -> Self {
-    Sink::new(tokio::io::stderr())
   }
 
   /// Set the output format of the sink.
@@ -56,7 +46,53 @@ impl Sink {
     self
   }
 
-  #[cfg(target_os = "linux")]
+  /// Set the buffer size of the sink.
+  /// The default buffer size is `16` lines.
+  pub fn buffer_size(mut self, size: usize) -> Self {
+    self.buffer_size = size;
+    self
+  }
+
+  /// Spawn the sink and return a [`SinkHandle`] to write to it.
+  pub fn spawn(self) -> SinkHandle {
+    let (action_tx, mut action_rx) = mpsc::channel(self.buffer_size);
+
+    let mut writer = self.writer;
+    tokio::spawn(async move {
+      while let Some(action) = action_rx.recv().await {
+        match action {
+          Action::Write(bytes) => writer.write_all(&bytes).await.unwrap(),
+          Action::Flush(ack_tx) => {
+            writer.flush().await.unwrap();
+            ack_tx.send(()).unwrap();
+          }
+        }
+      }
+    });
+
+    SinkHandle {
+      action_tx,
+      format: self.format,
+    }
+  }
+}
+
+impl Sink<Stdout> {
+  /// Create a new [`stdout`](tokio::io::stdout) sink.
+  pub fn stdout() -> Self {
+    Sink::new(tokio::io::stdout())
+  }
+}
+
+impl Sink<Stderr> {
+  /// Create a new [`stderr`](tokio::io::stderr) sink.
+  pub fn stderr() -> Self {
+    Sink::new(tokio::io::stderr())
+  }
+}
+
+#[cfg(target_os = "linux")]
+impl Sink<tokio::fs::File> {
   /// Create a new sink from the `_LAMBDA_TELEMETRY_LOG_FD` environment variable.
   pub fn lambda_telemetry_log_fd() -> Result<Self, Error> {
     std::env::var("_LAMBDA_TELEMETRY_LOG_FD")
@@ -69,25 +105,46 @@ impl Sink {
         )
       })
   }
+}
 
+enum Action {
+  Write(Vec<u8>),
+  Flush(oneshot::Sender<()>),
+}
+
+/// See [`Sink`].
+#[derive(Clone)]
+pub struct SinkHandle {
+  action_tx: mpsc::Sender<Action>,
+  format: OutputFormat,
+}
+
+impl SinkHandle {
   /// Write a string to the sink with a newline(`'\n'`) appended.
-  /// The `timestamp` will be used if the [`Self::format`] is [`OutputFormat::TelemetryLogFd`].
+  /// The `timestamp` will be used if the [`Sink::format`] is [`OutputFormat::TelemetryLogFd`].
+  /// Bytes are pushed into a queue and might not be written immediately.
+  /// You can call [`Self::flush`] to ensure all buffered data is written to the underlying writer.
   pub async fn write_line(&self, s: String, timestamp: i64) {
     let mut line = s.into_bytes();
     line.push(b'\n');
-    match self.format {
-      OutputFormat::Standard => self.writer.lock().await.write_all(&line).await.unwrap(),
+
+    let bytes = match self.format {
+      OutputFormat::Standard => line,
       OutputFormat::TelemetryLogFd => {
         let mut content = build_telemetry_log_fd_format_header(&line, timestamp);
         content.append(&mut line);
-        self.writer.lock().await.write_all(&content).await.unwrap()
+        content
       }
-    }
+    };
+
+    self.action_tx.send(Action::Write(bytes)).await.unwrap();
   }
 
   /// Flush the sink. Wait until all buffered data is written to the underlying writer.
   pub async fn flush(&self) {
-    self.writer.lock().await.flush().await.unwrap()
+    let (ack_tx, ack_rx) = oneshot::channel();
+    self.action_tx.send(Action::Flush(ack_tx)).await.unwrap();
+    ack_rx.await.unwrap();
   }
 }
 
@@ -161,6 +218,7 @@ mod tests {
   async fn sink_write_line() {
     // standard format
     Sink::new(tokio_test::io::Builder::new().write(b"hello\n").build())
+      .spawn()
       .write_line("hello".to_string(), 0)
       .await;
 
@@ -177,7 +235,21 @@ mod tests {
         .build(),
     )
     .format(OutputFormat::TelemetryLogFd)
+    .spawn()
     .write_line("hello".to_string(), 0)
     .await;
+  }
+
+  #[tokio::test]
+  async fn sink_handle_clone_able() {
+    let sink = Sink::new(
+      tokio_test::io::Builder::new()
+        .write(b"hello\nworld\n")
+        .build(),
+    )
+    .spawn();
+    let sink2 = sink.clone();
+    sink.write_line("hello".to_string(), 0).await;
+    sink2.write_line("world".to_string(), 0).await;
   }
 }

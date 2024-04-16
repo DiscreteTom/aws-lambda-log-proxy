@@ -1,13 +1,13 @@
-use crate::{Processor, Sink};
+use crate::{Processor, SinkHandle};
 
 /// Process log lines with [`Self::transformer`]
 /// and write them to [`Self::sink`].
 /// To create this, use [`SimpleProcessorBuilder::sink`](crate::SimpleProcessorBuilder::sink).
 pub struct SimpleProcessor {
-  /// See [`ProcessorBuilder::transformer`].
+  /// See [`SimpleProcessorBuilder::transformer`](crate::SimpleProcessorBuilder::transformer).
   pub transformer: Box<dyn FnMut(String) -> Option<String> + Send>,
-  /// See [`ProcessorBuilder::sink`].
-  pub sink: Sink,
+  /// See [`SimpleProcessorBuilder::sink`](crate::SimpleProcessorBuilder::sink).
+  pub sink: SinkHandle,
 }
 
 impl Processor for SimpleProcessor {
@@ -28,11 +28,11 @@ impl Processor for SimpleProcessor {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::SimpleProcessorBuilder;
+  use crate::{SimpleProcessorBuilder, Sink};
 
   #[tokio::test]
   async fn test_processor_process_default() {
-    let sink = Sink::new(tokio_test::io::Builder::new().write(b"hello\n").build());
+    let sink = Sink::new(tokio_test::io::Builder::new().write(b"hello\n").build()).spawn();
     let mut processor = SimpleProcessorBuilder::default().sink(sink);
     processor.process("hello".to_string(), 0).await;
   }
@@ -44,7 +44,8 @@ mod tests {
         .write(b"hello")
         .write(b"\n")
         .build(),
-    );
+    )
+    .spawn();
     let mut processor = SimpleProcessorBuilder::default()
       .ignore(|line| line == "world")
       .sink(sink);

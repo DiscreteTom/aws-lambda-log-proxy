@@ -5,7 +5,11 @@
 - **_Breaking Change_**: rename `LogProxy.disable_lambda_telemetry_log_fd` to `LogProxy.disable_lambda_telemetry_log_fd_for_handler`.
 - **_Breaking Change_**: rename `Processor` and `ProcessorBuilder` into `SimpleProcessor` and `SimpleProcessorBuilder`.
 - **_Breaking Change_**: add trait `Processor`, make `LogProxy` generic.
-- **_Breaking Change_**: `Sink::write_line` and `Processor::process` need a timestamp as the second argument.
+- **_Breaking Change_**: `Processor::process` need a timestamp as the second argument.
+- **_Breaking Change_**: `SimpleProcessor` need a `SinkHandle` instead of a `Sink`.
+  - Use `Sink::spawn` to create a `SinkHandle`.
+  - Move `write_line` and `flush` to `SinkHandle`.
+  - Sink will use a queue to optimize the performance. The queue can be configured by `Sink::buffer_size`.
 - Feat: add `LogProxy::new`.
 - Feat: add `LogProxy::buffer_size`, store lines in a buffer and record the in-buffer timestamp.
 - ~~Feat: add `LogProxy::suppression_timeout_ms` to customize the suppression timeout.~~
