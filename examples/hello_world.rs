@@ -3,9 +3,9 @@ use aws_lambda_log_proxy::{LogProxy, Sink};
 #[tokio::main]
 async fn main() {
   // Create a sink to write log lines to stdout.
-  let sink = Sink::stdout();
+  let sink = Sink::stdout().spawn();
 
-  LogProxy::default()
+  LogProxy::new()
     .stdout(|processor| {
       processor
         // only keep lines that contains "done"
