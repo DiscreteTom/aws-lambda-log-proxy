@@ -1,5 +1,6 @@
 # AWS Lambda Log Proxy
 
+[![Codecov](https://img.shields.io/codecov/c/github/DiscreteTom/aws-lambda-log-proxy?style=flat-square)](https://codecov.io/gh/DiscreteTom/aws-lambda-log-proxy)
 [![Crates.io Version](https://img.shields.io/crates/v/aws-lambda-log-proxy?style=flat-square)](https://crates.io/crates/aws-lambda-log-proxy)
 ![license](https://img.shields.io/github/license/DiscreteTom/aws-lambda-log-proxy?style=flat-square)
 
