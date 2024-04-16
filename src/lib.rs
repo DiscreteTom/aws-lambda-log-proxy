@@ -6,6 +6,7 @@ use aws_lambda_runtime_proxy::{LambdaRuntimeApiClient, Proxy};
 use std::process::Stdio;
 use tokio::{
   io::{AsyncBufReadExt, AsyncRead, BufReader},
+  process::Command,
   sync::{mpsc, oneshot},
 };
 
@@ -143,21 +144,10 @@ impl<StdoutProcessor, StderrProcessor> LogProxy<StdoutProcessor, StderrProcessor
     StdoutProcessor: Processor,
     StderrProcessor: Processor,
   {
-    let mut command = Proxy::default_command();
-
-    // only pipe if there is a processor
-    if self.stdout.is_some() {
-      command.stdout(Stdio::piped());
-    }
-    if self.stderr.is_some() {
-      command.stderr(Stdio::piped());
-    }
-
-    if self.disable_lambda_telemetry_log_fd_for_handler {
-      command.env_remove("_LAMBDA_TELEMETRY_LOG_FD");
-    }
-
-    let mut proxy = Proxy::default().command(command).spawn().await;
+    let mut proxy = Proxy::default()
+      .command(self.prepare_command(Proxy::default_command()))
+      .spawn()
+      .await;
 
     let stdout_checker_tx = proxy
       .handler
@@ -195,6 +185,22 @@ impl<StdoutProcessor, StderrProcessor> LogProxy<StdoutProcessor, StderrProcessor
         }
       })
       .await
+  }
+
+  fn prepare_command(&self, mut command: Command) -> Command {
+    // only pipe if there is a processor
+    if self.stdout.is_some() {
+      command.stdout(Stdio::piped());
+    }
+    if self.stderr.is_some() {
+      command.stderr(Stdio::piped());
+    }
+
+    if self.disable_lambda_telemetry_log_fd_for_handler {
+      command.env_remove("_LAMBDA_TELEMETRY_LOG_FD");
+    }
+
+    command
   }
 }
 
@@ -328,6 +334,88 @@ mod tests {
     assert!(proxy.stderr.is_none());
     assert_eq!(proxy.buffer_size, 256);
     assert!(proxy.disable_lambda_telemetry_log_fd_for_handler);
+  }
+
+  #[tokio::test]
+  async fn test_prepare_command_default() {
+    let proxy = LogProxy::new();
+    let command = proxy.prepare_command(Command::new("true")).spawn().unwrap();
+    assert!(command.stdout.is_none());
+    assert!(command.stderr.is_none());
+  }
+
+  #[tokio::test]
+  async fn test_prepare_command_env() {
+    // by default the _LAMBDA_TELEMETRY_LOG_FD is not removed
+    let proxy = LogProxy::new();
+    let mut command = Command::new("bash");
+    command
+      .args(&["-c", "echo $_LAMBDA_TELEMETRY_LOG_FD"])
+      .env("_LAMBDA_TELEMETRY_LOG_FD", "3");
+    let command = proxy
+      .prepare_command(command)
+      .stdout(Stdio::piped())
+      .spawn()
+      .unwrap();
+    assert!(BufReader::new(command.stdout.unwrap())
+      .lines()
+      .next_line()
+      .await
+      .unwrap()
+      .unwrap()
+      .contains("3"));
+
+    // remove the _LAMBDA_TELEMETRY_LOG_FD
+    let proxy = LogProxy::new().disable_lambda_telemetry_log_fd_for_handler(true);
+    let mut command = Command::new("bash");
+    command
+      .args(&["-c", "echo $_LAMBDA_TELEMETRY_LOG_FD"])
+      .env("_LAMBDA_TELEMETRY_LOG_FD", "3");
+    let command = proxy
+      .prepare_command(command)
+      .stdout(Stdio::piped())
+      .spawn()
+      .unwrap();
+    assert!(!BufReader::new(command.stdout.unwrap())
+      .lines()
+      .next_line()
+      .await
+      .unwrap()
+      .unwrap()
+      .contains("3"));
+  }
+
+  #[tokio::test]
+  async fn test_processor_will_set_stdout_and_stderr() {
+    let proxy = LogProxy {
+      stdout: Some(MockProcessor),
+      stderr: Some(MockProcessor),
+      ..Default::default()
+    };
+    let command = proxy.prepare_command(Command::new("echo")).spawn().unwrap();
+    assert!(command.stdout.is_some());
+    assert!(command.stderr.is_some());
+  }
+
+  #[tokio::test]
+  async fn test_wait_for_ack() {
+    let (ack_tx, ack_rx) = oneshot::channel();
+    tokio::spawn(async move {
+      tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+      ack_tx.send(()).unwrap();
+    });
+    wait_for_ack(Some(ack_rx)).await;
+  }
+
+  #[tokio::test]
+  async fn test_send_checker() {
+    let (checker_tx, mut checker_rx) = mpsc::channel(1);
+    tokio::spawn(async move {
+      let ack_rx = send_checker(&Some(checker_tx)).await;
+      wait_for_ack(ack_rx).await;
+    });
+    let ack_tx = checker_rx.recv().await.unwrap();
+    ack_tx.ack_tx.send(()).unwrap();
   }
 
   // this is to check if the `start` can be called with different processors during the compile time
