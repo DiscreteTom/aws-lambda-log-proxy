@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## v0.2.1
+
+- Fix: fix the issue that the log proxy can only write one line per invocation.
+
 ## v0.2.0
 
 - **_Breaking Change_**: rename `LogProxy.disable_lambda_telemetry_log_fd` to `LogProxy.disable_lambda_telemetry_log_fd_for_handler`.

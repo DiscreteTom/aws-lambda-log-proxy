@@ -243,7 +243,7 @@ where
 
         res = buffer_rx.recv() => {
           let (line, timestamp) = res.unwrap();
-          need_flush = need_flush || processor.process(line, timestamp).await;
+          need_flush = processor.process(line, timestamp).await || need_flush;
           // we don't need to flush here.
           // if we are writing to stdout, it is already line-buffered and will flush by line.
           // if we are writing to telemetry log fd, timestamp is appended so we don't need to flush it immediately.
