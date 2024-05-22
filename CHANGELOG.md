@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## v0.3.0
+
+- **_Breaking Change_**: the proxy will read from `stdin` and won't spawn the handler process.
+
 ## v0.2.1
 
 - Fix: fix the issue that the log proxy can only write one line per invocation.
