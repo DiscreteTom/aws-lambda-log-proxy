@@ -3,6 +3,8 @@
 ## v0.3.0
 
 - **_Breaking Change_**: the proxy will read from `stdin` and won't spawn the handler process.
+  - Users should use wrapper scripts to redirect the output of the handler process to the proxy process using pipes (`|`).
+  - This is to use output redirection (`2>&1`) provided by the system to ensure the log order across `stdout` and `stderr` is correct.
 
 ## v0.2.1
 
