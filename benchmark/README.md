@@ -1,5 +1,7 @@
 # Benchmark
 
+This benchmark will deploy `examples/hello_world` to filter logs.
+
 ## Deploy
 
 ```bash
