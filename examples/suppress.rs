@@ -29,8 +29,7 @@ async fn main() {
   let processor = MyProcessor(Sink::stdout().spawn());
 
   LogProxy {
-    stdout: Some(processor.clone()),
-    stderr: Some(processor),
+    processor: Some(processor),
     ..Default::default()
   }
   .start()

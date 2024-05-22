@@ -33,8 +33,7 @@ async fn main() {
   };
 
   LogProxy {
-    stdout: Some(processor.clone()),
-    stderr: Some(processor),
+    processor: Some(processor),
     ..Default::default()
   }
   .start()
