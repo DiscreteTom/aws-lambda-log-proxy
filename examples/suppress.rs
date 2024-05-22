@@ -16,6 +16,12 @@ impl Processor for MyProcessor {
     sleep(Duration::from_secs(1)).await;
     self.0.flush().await;
   }
+  async fn next(&mut self, headers: http::HeaderMap<http::HeaderValue>) {
+    eprintln!("{:?}", headers)
+  }
+  async fn truncate(&mut self) {
+    eprintln!("truncated")
+  }
 }
 
 #[tokio::main]
