@@ -1,9 +1,3 @@
-//! Even if our processor is slow, the log proxy can suppress the `invocation/next`
-//! until the log line is processed.
-//! In this example we will suppress the `invocation/next` for 2 seconds.
-//! Synchronous invoke of the lambda function (e.g. API Gateway) will get the response
-//! immediately but the lambda will run for 2 more seconds to process the log lines.
-
 use aws_lambda_log_proxy::{LogProxy, Processor, Sink, SinkHandle};
 use std::time::Duration;
 use tokio::time::sleep;
