@@ -99,6 +99,13 @@ impl<P> LogProxy<P> {
     self
   }
 
+  /// Set the port for the log proxy.
+  /// The default value is `3000`.
+  pub fn port(mut self, port: u16) -> Self {
+    self.port = port;
+    self
+  }
+
   /// Start the log proxy.
   /// This will block the current thread.
   pub async fn start(self)
