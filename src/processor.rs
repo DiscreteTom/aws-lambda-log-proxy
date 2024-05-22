@@ -18,4 +18,9 @@ pub trait Processor: Send + 'static {
   fn process(&mut self, line: String, timestamp: i64) -> impl Future<Output = bool> + Send;
   /// Flushes the underlying output stream, ensuring that all intermediately buffered contents reach their destination.
   fn flush(&mut self) -> impl Future<Output = ()> + Send;
+  /// This method is called when the current invocation is about to end (the proxy got `invocation/next`).
+  fn truncate(&mut self) -> impl Future<Output = ()> + Send {
+    // do nothing by default
+    async {}
+  }
 }

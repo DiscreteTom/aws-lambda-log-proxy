@@ -197,6 +197,8 @@ where
             need_flush = false;
           }
 
+          processor.truncate().await;
+
           checker.unwrap().send(()).unwrap();
         }
       }
