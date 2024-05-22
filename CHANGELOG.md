@@ -5,7 +5,7 @@
 - **_Breaking Change_**: the proxy will read from `stdin` and won't spawn the handler process.
   - Users should use wrapper scripts to redirect the output of the handler process to the proxy process using pipes (`|`).
   - This is to use output redirection (`2>&1`) provided by the system to ensure the log order across `stdout` and `stderr` is correct.
-- Feat: add optional `Processor::truncate` to indicate the end of the current invocation.
+- Feat: add optional `Processor::next` and `Processor::truncate` to indicate the start and the end of the current invocation.
 
 ## v0.2.1
 
