@@ -43,18 +43,17 @@ pub use processor::*;
 /// ```
 pub struct LogProxy<P> {
   /// The processor for stdin.
-  /// Defaults to [`None`].
-  pub processor: Option<P>,
+  pub processor: P,
   /// See [`Self::buffer_size`].
   pub buffer_size: usize,
   /// See [`Self::port`].
   pub port: u16,
 }
 
-impl<P> Default for LogProxy<P> {
+impl<P: Default> Default for LogProxy<P> {
   fn default() -> Self {
     Self {
-      processor: None,
+      processor: Default::default(),
       buffer_size: 256,
       port: 3000,
     }
@@ -85,7 +84,7 @@ impl<P> LogProxy<P> {
     builder: impl FnOnce(SimpleProcessorBuilder) -> SimpleProcessor,
   ) -> LogProxy<SimpleProcessor> {
     LogProxy {
-      processor: Some(builder(SimpleProcessorBuilder::default())),
+      processor: builder(SimpleProcessorBuilder::default()),
       buffer_size: self.buffer_size,
       port: self.port,
     }
@@ -115,58 +114,45 @@ impl<P> LogProxy<P> {
   where
     P: Processor,
   {
-    let tx = self
-      .processor
-      .map(|p| spawn_reader(stdin(), p, self.buffer_size));
+    let (checker_tx, next_tx) = spawn_reader(stdin(), self.processor, self.buffer_size);
 
     MockLambdaRuntimeApiServer::bind(self.port)
       .await
       .unwrap()
       .serve(move |req| {
-        let tx = tx.clone();
+        let checker_tx = checker_tx.clone();
+        let next_tx = next_tx.clone();
         async move {
-          match tx {
-            // if no processor, just forward the request
-            None => {
-              LambdaRuntimeApiClient::new()
-                .await
-                .unwrap()
-                .forward(req)
-                .await
-            }
-            Some((checker_tx, next_tx)) => {
-              let is_invocation_next = req.uri().path() == "/2018-06-01/runtime/invocation/next";
+          let is_invocation_next = req.uri().path() == "/2018-06-01/runtime/invocation/next";
 
-              if is_invocation_next {
-                // in lambda, send `invocation/next` will freeze current execution environment,
-                // unprocessed logs might be lost,
-                // so before proceeding, wait for the processors to finish processing the logs
+          if is_invocation_next {
+            // in lambda, send `invocation/next` will freeze current execution environment,
+            // unprocessed logs might be lost,
+            // so before proceeding, wait for the processors to finish processing the logs
 
-                // send checkers to reader threads
-                let (ack_tx, ack_rx) = oneshot::channel();
-                checker_tx.send(ack_tx).await.unwrap();
-                // wait for the checker to finish
-                ack_rx.await.unwrap();
-              }
-
-              // forward the request to the real lambda runtime API, consume the request
-              let res = LambdaRuntimeApiClient::new()
-                .await
-                .unwrap()
-                .forward(req)
-                .await
-                .unwrap();
-
-              if is_invocation_next {
-                let (ack_tx, ack_rx) = oneshot::channel();
-                next_tx.send((ack_tx, res.headers().clone())).await.unwrap();
-                // wait for the checker to finish
-                ack_rx.await.unwrap();
-              }
-
-              Ok(res)
-            }
+            // send checkers to reader threads
+            let (ack_tx, ack_rx) = oneshot::channel();
+            checker_tx.send(ack_tx).await.unwrap();
+            // wait for the checker to finish
+            ack_rx.await.unwrap();
           }
+
+          // forward the request to the real lambda runtime API, consume the request
+          let res = LambdaRuntimeApiClient::new()
+            .await
+            .unwrap()
+            .forward(req)
+            .await
+            .unwrap();
+
+          if is_invocation_next {
+            let (ack_tx, ack_rx) = oneshot::channel();
+            next_tx.send((ack_tx, res.headers().clone())).await.unwrap();
+            // wait for the checker to finish
+            ack_rx.await.unwrap();
+          }
+
+          Ok(res)
         }
       })
       .await
@@ -251,10 +237,16 @@ where
 mod tests {
   use super::*;
 
+  macro_rules! assert_unit {
+    ($unit:expr) => {
+      let _: () = $unit;
+    };
+  }
+
   #[test]
   fn test_log_proxy_default() {
     let proxy = LogProxy::new();
-    assert!(proxy.processor.is_none());
+    assert_unit!(proxy.processor);
     assert_eq!(proxy.buffer_size, 256);
     assert_eq!(proxy.port, 3000);
   }
@@ -263,7 +255,6 @@ mod tests {
   async fn test_log_proxy_processor() {
     let sink = Sink::stdout().spawn();
     let proxy = LogProxy::new().processor(|p| p.sink(sink));
-    assert!(proxy.processor.is_some());
     assert_eq!(proxy.buffer_size, 256);
     assert_eq!(proxy.port, 3000);
   }

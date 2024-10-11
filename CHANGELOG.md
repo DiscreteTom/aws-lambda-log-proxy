@@ -3,6 +3,7 @@
 ## v0.4.0
 
 - **_Breaking Change_**: remove `MockProcessor`, use `()` instead.
+- **_Breaking Change_**: `LogProxy::processor` is now `P` instead of `Option<P>`.
 
 ## v0.3.0
 
