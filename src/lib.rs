@@ -141,7 +141,9 @@ impl<P> LogProxy<P> {
             let (ack_tx, ack_rx) = oneshot::channel();
             checker_tx.send(ack_tx).await.unwrap();
             // wait for the checker to finish
+            debug!("Waiting for the processor to finish processing logs");
             ack_rx.await.unwrap();
+            debug!("Processor finished processing logs");
           }
 
           // forward the request to the real lambda runtime API, consume the request
