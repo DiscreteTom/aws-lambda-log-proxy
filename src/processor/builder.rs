@@ -8,6 +8,7 @@ pub struct SimpleProcessorBuilder<T, S> {
 }
 
 impl SimpleProcessorBuilder<fn(String) -> Option<String>, ()> {
+  /// Create a new [`SimpleProcessorBuilder`] with the default transformer and no sink.
   pub fn new() -> Self {
     Self {
       transformer: Some,
