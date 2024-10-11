@@ -28,10 +28,5 @@ impl Processor for MyProcessor {
 async fn main() {
   let processor = MyProcessor(Sink::stdout().spawn());
 
-  LogProxy {
-    processor: Some(processor),
-    ..Default::default()
-  }
-  .start()
-  .await;
+  LogProxy::new().processor(processor).start().await;
 }

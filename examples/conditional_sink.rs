@@ -32,10 +32,5 @@ async fn main() {
     stderr_sink: Sink::stderr().spawn(),
   };
 
-  LogProxy {
-    processor: Some(processor),
-    ..Default::default()
-  }
-  .start()
-  .await;
+  LogProxy::new().processor(processor).start().await;
 }

@@ -3,7 +3,7 @@ use aws_lambda_log_proxy::{LogProxy, Sink};
 #[tokio::main]
 async fn main() {
   LogProxy::new()
-    .processor(|processor| {
+    .simple(|processor| {
       processor
         // only keep lines that contains "done"
         .filter(|line| line.contains("done"))
