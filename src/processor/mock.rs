@@ -18,7 +18,7 @@ mod tests {
   #[tokio::test]
   async fn mock_processor() {
     let mut processor = MockProcessor;
-    assert_eq!(processor.process("hello".to_string(), 0).await, false);
+    assert!(!(processor.process("hello".to_string(), 0).await));
     processor.flush().await;
   }
 }

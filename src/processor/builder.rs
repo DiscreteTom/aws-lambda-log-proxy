@@ -8,7 +8,7 @@ pub struct SimpleProcessorBuilder {
 impl Default for SimpleProcessorBuilder {
   fn default() -> Self {
     SimpleProcessorBuilder {
-      transformer: Box::new(|s| Some(s)),
+      transformer: Box::new(Some),
     }
   }
 }
