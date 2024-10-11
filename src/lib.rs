@@ -167,10 +167,10 @@ where
   let (checker_tx, mut checker_rx) = mpsc::channel::<oneshot::Sender<()>>(1);
   let (buffer_tx, mut buffer_rx) = mpsc::channel(buffer_size);
 
-  // the reader thread, read from the file then push into the buffer
+  // the reader thread, read from the file then push into the buffer.
+  // we use a separate thread to read from the file to get an accurate timestamp.
   tokio::spawn(async move {
-    let reader = BufReader::new(file);
-    let mut lines = reader.lines();
+    let mut lines = BufReader::new(file).lines();
     while let Ok(Some(line)) = lines.next_line().await {
       trace!(line = %line, "Read line");
       // `next_line` already removes '\n' and '\r', so we only need to check if the line is empty.
@@ -183,6 +183,7 @@ where
           .unwrap();
       }
     }
+    debug!("Reader thread finished");
   });
 
   // the processor thread
