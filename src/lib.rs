@@ -119,12 +119,19 @@ impl<P> LogProxy<P> {
 
     MockLambdaRuntimeApiServer::bind(self.port)
       .await
+      .unwrap()
       .serve(move |req| {
         let tx = tx.clone();
         async move {
           match tx {
             // if no processor, just forward the request
-            None => LambdaRuntimeApiClient::forward(req).await,
+            None => {
+              LambdaRuntimeApiClient::new()
+                .await
+                .unwrap()
+                .forward(req)
+                .await
+            }
             Some((checker_tx, next_tx)) => {
               let is_invocation_next = req.uri().path() == "/2018-06-01/runtime/invocation/next";
 
@@ -141,7 +148,12 @@ impl<P> LogProxy<P> {
               }
 
               // forward the request to the real lambda runtime API, consume the request
-              let res = LambdaRuntimeApiClient::forward(req).await.unwrap();
+              let res = LambdaRuntimeApiClient::new()
+                .await
+                .unwrap()
+                .forward(req)
+                .await
+                .unwrap();
 
               if is_invocation_next {
                 let (ack_tx, ack_rx) = oneshot::channel();
