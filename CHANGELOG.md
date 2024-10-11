@@ -13,6 +13,7 @@
 - **_Breaking Change_**: make `SimpleProcessorBuilder` generic, use `SimpleProcessorBuilder::new` to create a `SimpleProcessorBuilder`, use `SimpleProcessorBuilder::build` to create a `SimpleProcessor`, remove `SimpleProcessorBuilder::ignore/filter`.
 - Feat: add `is_emf` util function.
 - Feat: apply `tracing`.
+- Feat: add `MockSink`.
 
 ## v0.3.0
 

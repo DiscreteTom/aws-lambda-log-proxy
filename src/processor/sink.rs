@@ -1,3 +1,10 @@
+use std::{
+  env, io,
+  num::ParseIntError,
+  pin::Pin,
+  task::{Context, Poll},
+};
+
 use super::Timestamp;
 use tokio::{
   io::{AsyncWrite, AsyncWriteExt, Stderr, Stdout},
@@ -95,11 +102,35 @@ impl Sink<Stderr> {
   }
 }
 
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MockSink;
+
+impl AsyncWrite for MockSink {
+  fn poll_write(self: Pin<&mut Self>, _: &mut Context<'_>, _: &[u8]) -> Poll<io::Result<usize>> {
+    Poll::Ready(Ok(0))
+  }
+
+  fn poll_flush(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<io::Result<()>> {
+    Poll::Ready(Ok(()))
+  }
+
+  fn poll_shutdown(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<io::Result<()>> {
+    Poll::Ready(Ok(()))
+  }
+}
+
+impl Sink<MockSink> {
+  /// Create a new [`MockSink`] for testing.
+  pub fn mock() -> Self {
+    Sink::new(MockSink)
+  }
+}
+
 #[cfg(target_os = "linux")]
 impl Sink<tokio::fs::File> {
   /// Create a new sink from the `_LAMBDA_TELEMETRY_LOG_FD` environment variable.
   pub fn lambda_telemetry_log_fd() -> Result<Self, Error> {
-    std::env::var("_LAMBDA_TELEMETRY_LOG_FD")
+    env::var("_LAMBDA_TELEMETRY_LOG_FD")
       .map_err(Error::VarError)
       .and_then(|fd| {
         let fd = fd.parse().map_err(Error::ParseIntError)?;
@@ -167,8 +198,8 @@ fn build_telemetry_log_fd_format_header(line: &[u8], timestamp: i64) -> Vec<u8> 
 
 #[derive(Debug)]
 pub enum Error {
-  VarError(std::env::VarError),
-  ParseIntError(std::num::ParseIntError),
+  VarError(env::VarError),
+  ParseIntError(ParseIntError),
 }
 
 #[cfg(test)]
@@ -209,20 +240,20 @@ mod tests {
   #[cfg(target_os = "linux")]
   #[test]
   fn sink_lambda_telemetry_log_fd() {
-    std::env::set_var("_LAMBDA_TELEMETRY_LOG_FD", "1");
+    env::set_var("_LAMBDA_TELEMETRY_LOG_FD", "1");
     let sink = Sink::lambda_telemetry_log_fd().unwrap();
     assert_eq!(sink.format, OutputFormat::TelemetryLogFd);
-    std::env::remove_var("_LAMBDA_TELEMETRY_LOG_FD");
+    env::remove_var("_LAMBDA_TELEMETRY_LOG_FD");
 
     // missing env var
     let result = Sink::lambda_telemetry_log_fd();
     assert!(matches!(result, Err(Error::VarError(_))));
 
     // invalid fd
-    std::env::set_var("_LAMBDA_TELEMETRY_LOG_FD", "invalid");
+    env::set_var("_LAMBDA_TELEMETRY_LOG_FD", "invalid");
     let result = Sink::lambda_telemetry_log_fd();
     assert!(matches!(result, Err(Error::ParseIntError(_))));
-    std::env::remove_var("_LAMBDA_TELEMETRY_LOG_FD");
+    env::remove_var("_LAMBDA_TELEMETRY_LOG_FD");
   }
 
   #[tokio::test]
