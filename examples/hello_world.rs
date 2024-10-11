@@ -6,9 +6,10 @@ async fn main() {
     .simple(|processor| {
       processor
         // only keep lines that contains "done"
-        .filter(|line| line.contains("done"))
+        .transformer(|line| line.contains("done").then_some(line))
         // Create a sink to write log lines to stdout.
         .sink(Sink::stdout().spawn())
+        .build()
     })
     .start()
     .await;

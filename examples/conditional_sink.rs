@@ -11,15 +11,14 @@ pub struct MyProcessor {
 }
 
 impl Processor for MyProcessor {
-  async fn process(&mut self, line: String, timestamp: Timestamp) -> bool {
+  async fn process(&mut self, line: String, timestamp: Timestamp) {
     if line.starts_with("out") {
       self.stdout_sink.write_line(line, timestamp).await;
     } else {
       self.stderr_sink.write_line(line, timestamp).await;
     }
-    true
   }
-  async fn flush(&mut self) {
+  async fn truncate(&mut self) {
     self.stdout_sink.flush().await;
     self.stderr_sink.flush().await;
   }
