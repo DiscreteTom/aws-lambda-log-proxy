@@ -15,12 +15,9 @@ pub use processor::*;
 /// ```
 /// use aws_lambda_log_proxy::{LogProxy, Sink};
 ///
-/// #[tokio::main]
-/// async fn main() {
-///   let proxy = LogProxy::new().processor(|p| p.sink(Sink::stdout().spawn()));
-///   // start the proxy
-///   // proxy.start().await;
-/// }
+/// # async fn t1() {
+/// LogProxy::new().simple(|p| p.sink(Sink::stdout().spawn())).start().await;
+/// # }
 /// ```
 /// Custom creation:
 /// ```
@@ -36,10 +33,9 @@ pub use processor::*;
 ///   async fn flush(&mut self) {}
 /// }
 ///
-/// let proxy = LogProxy {
-///   processor: Some(MyProcessor),
-///   ..Default::default()
-/// };
+/// # async fn t1() {
+/// LogProxy::new().processor(MyProcessor).buffer_size(1024).port(1234).start().await;
+/// # }
 /// ```
 pub struct LogProxy<P> {
   /// The processor for stdin.
@@ -83,10 +79,9 @@ impl<P> LogProxy<P> {
   /// ```
   /// use aws_lambda_log_proxy::{LogProxy, Sink};
   ///
-  /// #[tokio::main]
-  /// async fn main() {
-  ///   LogProxy::new().processor(|p| p.sink(Sink::stdout().spawn()));
-  /// }
+  /// # async fn t1() {
+  /// LogProxy::new().simple(|p| p.sink(Sink::stdout().spawn()));
+  /// # }
   /// ```
   pub fn simple(
     self,
