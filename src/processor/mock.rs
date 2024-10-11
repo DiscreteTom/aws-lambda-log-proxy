@@ -4,7 +4,6 @@ use crate::Processor;
 // the mock processor will discard all logs
 impl Processor for () {
   async fn process(&mut self, _line: String, _timestamp: Timestamp) {}
-
   async fn truncate(&mut self) {}
 }
 
