@@ -9,7 +9,7 @@
 - **_Breaking Change_**: remove `Processor::flush`.
 - **_Breaking Change_**: change the type of `timestamp` in `Processor::process` to `Timestamp`.
 - **_Breaking Change_**: remove `MockProcessor`, use `()` instead.
-- **_Breaking Change_**: add `SimpleProcessor::new`, prevent users from creating a `SimpleProcessor` directly.
+- **_Breaking Change_**: make `SimpleProcessor` generic, add `SimpleProcessor::new`, prevent users from creating a `SimpleProcessor` directly.
 - **_Breaking Change_**: make `SimpleProcessorBuilder` generic, use `SimpleProcessorBuilder::new` to create a `SimpleProcessorBuilder`, use `SimpleProcessorBuilder::build` to create a `SimpleProcessor`, remove `SimpleProcessorBuilder::ignore/filter`.
 - Feat: add `is_emf` util function.
 - Feat: apply `tracing`.

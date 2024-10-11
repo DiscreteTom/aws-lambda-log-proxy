@@ -47,7 +47,7 @@ impl<T, S> SimpleProcessorBuilder<T, S> {
 
 impl<T: FnMut(String) -> Option<String> + Send + 'static> SimpleProcessorBuilder<T, SinkHandle> {
   /// Create a new [`SimpleProcessor`] with the given `sink` and [`Self::transformer`].
-  pub fn build(self) -> SimpleProcessor {
+  pub fn build(self) -> SimpleProcessor<T> {
     SimpleProcessor::new(self.transformer, self.sink)
   }
 }

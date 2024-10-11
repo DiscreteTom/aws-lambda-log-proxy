@@ -5,29 +5,26 @@ use crate::{Processor, SinkHandle};
 /// and write them to [`Self::sink`].
 ///
 /// You can use [`SimpleProcessorBuilder`](crate::SimpleProcessorBuilder) to create this.
-pub struct SimpleProcessor {
+pub struct SimpleProcessor<T> {
   /// See [`SimpleProcessorBuilder::transformer`](crate::SimpleProcessorBuilder::transformer).
-  pub transformer: Box<dyn FnMut(String) -> Option<String> + Send>,
+  pub transformer: T,
   /// See [`SimpleProcessorBuilder::sink`](crate::SimpleProcessorBuilder::sink).
   pub sink: SinkHandle,
 
   need_flush: bool,
 }
 
-impl SimpleProcessor {
-  pub fn new(
-    transformer: impl FnMut(String) -> Option<String> + Send + 'static,
-    sink: SinkHandle,
-  ) -> Self {
+impl<T> SimpleProcessor<T> {
+  pub fn new(transformer: T, sink: SinkHandle) -> Self {
     Self {
-      transformer: Box::new(transformer),
+      transformer,
       sink,
       need_flush: false,
     }
   }
 }
 
-impl Processor for SimpleProcessor {
+impl<T: FnMut(String) -> Option<String> + Send + 'static> Processor for SimpleProcessor<T> {
   async fn process(&mut self, line: String, timestamp: Timestamp) {
     if let Some(transformed) = (self.transformer)(line) {
       self.sink.write_line(transformed, timestamp).await;

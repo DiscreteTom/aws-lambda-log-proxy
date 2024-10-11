@@ -87,10 +87,10 @@ impl<P> LogProxy<P> {
   /// LogProxy::new().simple(|p| p.sink(Sink::stdout().spawn()).build());
   /// # }
   /// ```
-  pub fn simple(
+  pub fn simple<T>(
     self,
-    builder: impl FnOnce(SimpleProcessorBuilder<fn(String) -> Option<String>, ()>) -> SimpleProcessor,
-  ) -> LogProxy<SimpleProcessor> {
+    builder: impl FnOnce(SimpleProcessorBuilder<fn(String) -> Option<String>, ()>) -> SimpleProcessor<T>,
+  ) -> LogProxy<SimpleProcessor<T>> {
     self.processor(builder(SimpleProcessorBuilder::new()))
   }
 
@@ -255,7 +255,7 @@ mod tests {
     let proxy: LogProxy<()> = LogProxy::new();
     proxy.start().await;
     let sink = Sink::stdout().spawn();
-    let proxy: LogProxy<SimpleProcessor> = LogProxy::new().simple(|p| p.sink(sink.clone()).build());
+    let proxy = LogProxy::new().simple(|p| p.sink(sink.clone()).build());
     proxy.start().await;
   }
 }
