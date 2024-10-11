@@ -1,9 +1,7 @@
 use crate::Processor;
 
-/// This will discard all log lines.
-pub struct MockProcessor;
-
-impl Processor for MockProcessor {
+// the mock processor will discard all logs
+impl Processor for () {
   async fn process(&mut self, _line: String, _timestamp: i64) -> bool {
     false
   }
@@ -17,7 +15,7 @@ mod tests {
 
   #[tokio::test]
   async fn mock_processor() {
-    let mut processor = MockProcessor;
+    let mut processor = ();
     assert!(!(processor.process("hello".to_string(), 0).await));
     processor.flush().await;
   }

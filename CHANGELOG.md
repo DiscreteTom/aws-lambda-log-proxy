@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## v0.4.0
+
+- **_Breaking Change_**: remove `MockProcessor`, use `()` instead.
+
 ## v0.3.0
 
 - **_Breaking Change_**: the proxy will read from `stdin` and won't spawn the handler process.

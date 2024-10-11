@@ -61,8 +61,9 @@ impl<P> Default for LogProxy<P> {
   }
 }
 
-impl LogProxy<MockProcessor> {
-  /// Create a new instance with [`MockProcessor`] and default properties.
+impl LogProxy<()> {
+  /// Create a new instance with the default properties
+  /// and a mock processor which will discard all logs.
   pub fn new() -> Self {
     Self::default()
   }
@@ -283,7 +284,7 @@ mod tests {
   // so don't run this test
   async fn _ensure_start_can_be_called() {
     // mock processor
-    let proxy: LogProxy<MockProcessor> = LogProxy::new();
+    let proxy: LogProxy<()> = LogProxy::new();
     proxy.start().await;
     let sink = Sink::stdout().spawn();
     let proxy: LogProxy<SimpleProcessor> = LogProxy::new().processor(|p| p.sink(sink.clone()));
