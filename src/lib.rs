@@ -13,6 +13,7 @@ use tokio::{
 #[cfg(feature = "emf")]
 pub use emf::*;
 pub use processor::*;
+use tracing::{debug, trace};
 
 /// # Examples
 /// Simple creation:
@@ -118,6 +119,8 @@ impl<P> LogProxy<P> {
   where
     P: Processor,
   {
+    debug!(port = %self.port, buffer_size = %self.buffer_size, "Starting log proxy");
+
     let (checker_tx, next_tx) = spawn_reader(stdin(), self.processor, self.buffer_size);
 
     MockLambdaRuntimeApiServer::bind(self.port)
@@ -183,6 +186,7 @@ where
     let reader = BufReader::new(file);
     let mut lines = reader.lines();
     while let Ok(Some(line)) = lines.next_line().await {
+      trace!(line = %line, "Read line");
       // `next_line` already removes '\n' and '\r', so we only need to check if the line is empty.
       // only push into buffer if the line is not empty
       if !line.is_empty() {
