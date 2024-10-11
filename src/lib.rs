@@ -145,14 +145,11 @@ impl<P> LogProxy<P> {
           }
 
           // forward the request to the real lambda runtime API, consume the request
-          let res = LambdaRuntimeApiClient::new()
+          LambdaRuntimeApiClient::new()
             .await
             .unwrap()
             .forward(req)
             .await
-            .unwrap();
-
-          Ok(res)
         }
       })
       .await
