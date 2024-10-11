@@ -6,6 +6,7 @@
 - **_Breaking Change_**: `LogProxy::processor` is now `P` instead of `Option<P>`.
 - **_Breaking Change_**: rename `LogProxy::processor` to `LogProxy::simple`, add a new `LogProxy::processor` to support custom processors.
 - **_Breaking Change_**: remove `Processor::next`. You can register your log proxy process as an external extension to achieve the same effect.
+- **_Breaking Change_**: change the type of `timestamp` in `Processor::process` to `Timestamp`.
 - Feat: add `is_emf` util function.
 - Feat: apply `tracing`.
 

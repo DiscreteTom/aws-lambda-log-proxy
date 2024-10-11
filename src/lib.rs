@@ -8,11 +8,11 @@ use tokio::{
   io::{stdin, AsyncBufReadExt, AsyncRead, BufReader},
   sync::{mpsc, oneshot},
 };
+use tracing::{debug, trace};
 
 #[cfg(feature = "emf")]
 pub use emf::*;
 pub use processor::*;
-use tracing::{debug, trace};
 
 /// # Examples
 /// Simple creation:
@@ -177,10 +177,7 @@ where
       // only push into buffer if the line is not empty
       if !line.is_empty() {
         // put line in a queue, record the timestamp
-        buffer_tx
-          .send((line, Utc::now().timestamp_micros()))
-          .await
-          .unwrap();
+        buffer_tx.send((line, Utc::now())).await.unwrap();
       }
     }
     debug!("Reader thread finished");

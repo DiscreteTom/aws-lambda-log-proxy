@@ -1,3 +1,4 @@
+use super::Timestamp;
 use tokio::{
   io::{AsyncWrite, AsyncWriteExt, Stderr, Stdout},
   sync::{mpsc, oneshot},
@@ -127,14 +128,14 @@ impl SinkHandle {
   /// The `timestamp` will be used if the [`Sink::format`] is [`OutputFormat::TelemetryLogFd`].
   /// Bytes are pushed into a queue and might not be written immediately.
   /// You can call [`Self::flush`] to ensure all buffered data is written to the underlying writer.
-  pub async fn write_line(&self, s: String, timestamp: i64) {
+  pub async fn write_line(&self, s: String, timestamp: Timestamp) {
     let mut line = s.into_bytes();
     line.push(b'\n');
 
     let bytes = match self.format {
       OutputFormat::Standard => line,
       OutputFormat::TelemetryLogFd => {
-        let mut content = build_telemetry_log_fd_format_header(&line, timestamp);
+        let mut content = build_telemetry_log_fd_format_header(&line, timestamp.timestamp_micros());
         content.append(&mut line);
         content
       }
@@ -173,6 +174,7 @@ pub enum Error {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use chrono::DateTime;
 
   #[test]
   fn default_sink_format() {
@@ -228,7 +230,7 @@ mod tests {
     // standard format
     Sink::new(tokio_test::io::Builder::new().write(b"hello\n").build())
       .spawn()
-      .write_line("hello".to_string(), 0)
+      .write_line("hello".to_string(), mock_timestamp())
       .await;
 
     // telemetry log format header
@@ -245,14 +247,14 @@ mod tests {
     )
     .format(OutputFormat::TelemetryLogFd)
     .spawn()
-    .write_line("hello".to_string(), 0)
+    .write_line("hello".to_string(), mock_timestamp())
     .await;
   }
 
   #[tokio::test]
   async fn sink_flush() {
     let sink = Sink::new(tokio_test::io::Builder::new().write(b"hello\n").build()).spawn();
-    sink.write_line("hello".to_string(), 0).await;
+    sink.write_line("hello".to_string(), mock_timestamp()).await;
     sink.flush().await;
   }
 
@@ -265,7 +267,13 @@ mod tests {
     )
     .spawn();
     let sink2 = sink.clone();
-    sink.write_line("hello".to_string(), 0).await;
-    sink2.write_line("world".to_string(), 0).await;
+    sink.write_line("hello".to_string(), mock_timestamp()).await;
+    sink2
+      .write_line("world".to_string(), mock_timestamp())
+      .await;
+  }
+
+  fn mock_timestamp() -> Timestamp {
+    DateTime::from_timestamp(0, 0).unwrap()
   }
 }

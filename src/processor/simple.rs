@@ -1,3 +1,4 @@
+use super::Timestamp;
 use crate::{Processor, SinkHandle};
 
 /// Process log lines with [`Self::transformer`]
@@ -11,7 +12,7 @@ pub struct SimpleProcessor {
 }
 
 impl Processor for SimpleProcessor {
-  async fn process(&mut self, line: String, timestamp: i64) -> bool {
+  async fn process(&mut self, line: String, timestamp: Timestamp) -> bool {
     if let Some(transformed) = (self.transformer)(line) {
       self.sink.write_line(transformed, timestamp).await;
       true
@@ -29,12 +30,15 @@ impl Processor for SimpleProcessor {
 mod tests {
   use super::*;
   use crate::{SimpleProcessorBuilder, Sink};
+  use chrono::DateTime;
 
   #[tokio::test]
   async fn test_processor_process_default() {
     let sink = Sink::new(tokio_test::io::Builder::new().write(b"hello\n").build()).spawn();
     let mut processor = SimpleProcessorBuilder::default().sink(sink);
-    processor.process("hello".to_string(), 0).await;
+    processor
+      .process("hello".to_string(), mock_timestamp())
+      .await;
     processor.flush().await;
   }
 
@@ -50,8 +54,16 @@ mod tests {
     let mut processor = SimpleProcessorBuilder::default()
       .ignore(|line| line == "world")
       .sink(sink);
-    processor.process("hello".to_string(), 0).await;
-    processor.process("world".to_string(), 0).await;
+    processor
+      .process("hello".to_string(), mock_timestamp())
+      .await;
+    processor
+      .process("world".to_string(), mock_timestamp())
+      .await;
     processor.flush().await;
+  }
+
+  fn mock_timestamp() -> Timestamp {
+    DateTime::from_timestamp(0, 0).unwrap()
   }
 }
