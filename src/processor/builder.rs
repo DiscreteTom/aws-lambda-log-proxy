@@ -57,10 +57,18 @@ impl<T: FnMut(String) -> Option<String> + Send + 'static> SimpleProcessorBuilder
 mod tests {
   use super::*;
 
+  macro_rules! assert_unit {
+    ($unit:expr) => {
+      let _: () = $unit;
+    };
+  }
+
   #[test]
   fn default_transformer() {
-    let text = "test".to_string();
     let processor = SimpleProcessorBuilder::default();
+    assert_unit!(processor.sink);
+
+    let text = "test".to_string();
     let transformed = (processor.transformer)(text.clone());
     // default transformer should return the input line as is
     assert_eq!(transformed, Some(text));

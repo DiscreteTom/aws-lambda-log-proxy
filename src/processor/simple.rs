@@ -53,20 +53,16 @@ mod tests {
     processor
       .process("hello".to_string(), mock_timestamp())
       .await;
+    assert!(processor.need_flush);
     processor.truncate().await;
+    assert!(!processor.need_flush);
   }
 
   #[tokio::test]
   async fn test_processor_process_with_transformer() {
-    let sink = Sink::new(
-      tokio_test::io::Builder::new()
-        .write(b"hello")
-        .write(b"\n")
-        .build(),
-    )
-    .spawn();
+    let sink = Sink::new(tokio_test::io::Builder::new().write(b"hello\n").build()).spawn();
     let mut processor = SimpleProcessorBuilder::new()
-      .transformer(|line| (line == "world").then_some(line))
+      .transformer(|line| (line != "world").then_some(line))
       .sink(sink)
       .build();
     processor

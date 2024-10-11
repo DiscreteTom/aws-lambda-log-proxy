@@ -20,21 +20,18 @@ pub use processor::*;
 /// use aws_lambda_log_proxy::{LogProxy, Sink};
 ///
 /// # async fn t1() {
-/// LogProxy::new().simple(|p| p.sink(Sink::stdout().spawn())).start().await;
+/// LogProxy::new().simple(|p| p.sink(Sink::stdout().spawn()).build()).start().await;
 /// # }
 /// ```
 /// Custom creation:
 /// ```
-/// use aws_lambda_log_proxy::{LogProxy, Processor};
+/// use aws_lambda_log_proxy::{LogProxy, Processor, Timestamp};
 ///
 /// pub struct MyProcessor;
 ///
 /// impl Processor for MyProcessor {
-///   async fn process(&mut self, _line: String, _timestamp: i64) -> bool {
-///     false
-///   }
-///
-///   async fn flush(&mut self) {}
+///   async fn process(&mut self, _line: String, _timestamp: Timestamp) { }
+///   async fn truncate(&mut self) { }
 /// }
 ///
 /// # async fn t1() {
@@ -212,6 +209,8 @@ where
 
 #[cfg(test)]
 mod tests {
+  use serial_test::serial;
+
   use super::*;
 
   macro_rules! assert_unit {
@@ -229,6 +228,7 @@ mod tests {
   }
 
   #[tokio::test]
+  #[serial]
   async fn test_log_proxy_simple() {
     let sink = Sink::stdout().spawn();
     let proxy = LogProxy::new().simple(|p| p.sink(sink).build());

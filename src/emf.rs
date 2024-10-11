@@ -20,3 +20,26 @@ pub fn is_emf(line: &str) -> bool {
     .map(|value: Value| value.get("_aws").is_some())
     .unwrap_or(false)
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn check_emf() {
+    // compact
+    assert!(is_emf(r#"{"_aws":{"key":"value"}}"#));
+    // with whitespace
+    assert!(is_emf(r#"{"_aws": {"key": "value"}}"#));
+    assert!(is_emf(r#"  {  "_aws"  : {"key": "value"}  }  "#));
+
+    // missing "_aws"
+    assert!(!is_emf(r#"{"key": "value"}"#));
+    assert!(!is_emf(r#"{"  _aws":{"key":"value"}}"#));
+    // invalid JSON
+    assert!(!is_emf(r#"{"_aws": {"key": "value"}"#));
+    // not a JSON object
+    assert!(!is_emf("123"));
+    assert!(!is_emf("{"));
+  }
+}
