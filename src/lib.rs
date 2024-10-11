@@ -62,6 +62,7 @@ impl<P> Default for LogProxy<P> {
 }
 
 impl LogProxy<MockProcessor> {
+  /// Create a new instance with [`MockProcessor`] and default properties.
   pub fn new() -> Self {
     Self::default()
   }
