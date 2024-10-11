@@ -15,6 +15,9 @@ pub trait Processor: Send + 'static {
   ///
   /// Return `true` if the line is written to the underlying output stream (maybe an empty line, maybe need flush).
   /// Return `false` if the line is ignored.
+  ///
+  /// The line may be an [EMF](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch_Embedded_Metric_Format_Specification.html) line.
+  /// You can use the [`is_emf`](crate::is_emf) util function to check if it is.
   fn process(&mut self, line: String, timestamp: i64) -> impl Future<Output = bool> + Send;
 
   /// Flushes the underlying output stream, ensuring that all intermediately buffered contents reach their destination.

@@ -5,6 +5,7 @@
 - **_Breaking Change_**: remove `MockProcessor`, use `()` instead.
 - **_Breaking Change_**: `LogProxy::processor` is now `P` instead of `Option<P>`.
 - **_Breaking Change_**: rename `LogProxy::processor` to `LogProxy::simple`, add a new `LogProxy::processor` to support custom processors.
+- Feat: add `is_emf` util function.
 
 ## v0.3.0
 

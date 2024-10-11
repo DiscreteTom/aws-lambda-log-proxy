@@ -1,3 +1,5 @@
+#[cfg(feature = "emf")]
+mod emf;
 mod processor;
 
 use aws_lambda_runtime_proxy::{LambdaRuntimeApiClient, MockLambdaRuntimeApiServer};
@@ -8,6 +10,8 @@ use tokio::{
   sync::{mpsc, oneshot},
 };
 
+#[cfg(feature = "emf")]
+pub use emf::*;
 pub use processor::*;
 
 /// # Examples
