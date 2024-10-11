@@ -1,4 +1,4 @@
-use aws_lambda_log_proxy::{LogProxy, Processor, Sink, SinkHandle};
+use aws_lambda_log_proxy::{LogProxy, Processor, Sink, SinkHandle, Timestamp};
 use std::time::Duration;
 use tokio::time::sleep;
 
@@ -7,7 +7,7 @@ use tokio::time::sleep;
 pub struct MyProcessor(SinkHandle);
 
 impl Processor for MyProcessor {
-  async fn process(&mut self, line: String, timestamp: i64) -> bool {
+  async fn process(&mut self, line: String, timestamp: Timestamp) -> bool {
     sleep(Duration::from_secs(1)).await;
     self.0.write_line(line, timestamp).await;
     true

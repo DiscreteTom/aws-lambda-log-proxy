@@ -1,7 +1,7 @@
 //! The SimpleProcessor can only have one sink.
 //! But with custom processor you can have conditional sink.
 
-use aws_lambda_log_proxy::{LogProxy, Processor, Sink, SinkHandle};
+use aws_lambda_log_proxy::{LogProxy, Processor, Sink, SinkHandle, Timestamp};
 
 // SinkHandle is clone-able so our processor is also clone-able.
 #[derive(Clone)]
@@ -11,7 +11,7 @@ pub struct MyProcessor {
 }
 
 impl Processor for MyProcessor {
-  async fn process(&mut self, line: String, timestamp: i64) -> bool {
+  async fn process(&mut self, line: String, timestamp: Timestamp) -> bool {
     if line.starts_with("out") {
       self.stdout_sink.write_line(line, timestamp).await;
     } else {
