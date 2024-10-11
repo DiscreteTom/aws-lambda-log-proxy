@@ -69,6 +69,15 @@ impl LogProxy<()> {
 }
 
 impl<P> LogProxy<P> {
+  /// Set [`Self::processor`] to a custom processor.
+  pub fn processor<T>(self, processor: T) -> LogProxy<T> {
+    LogProxy {
+      processor,
+      buffer_size: self.buffer_size,
+      port: self.port,
+    }
+  }
+
   /// Set [`Self::processor`] to a [`SimpleProcessor`] via [`SimpleProcessorBuilder`].
   /// # Examples
   /// ```
@@ -79,15 +88,11 @@ impl<P> LogProxy<P> {
   ///   LogProxy::new().processor(|p| p.sink(Sink::stdout().spawn()));
   /// }
   /// ```
-  pub fn processor(
+  pub fn simple(
     self,
     builder: impl FnOnce(SimpleProcessorBuilder) -> SimpleProcessor,
   ) -> LogProxy<SimpleProcessor> {
-    LogProxy {
-      processor: builder(SimpleProcessorBuilder::default()),
-      buffer_size: self.buffer_size,
-      port: self.port,
-    }
+    self.processor(builder(SimpleProcessorBuilder::default()))
   }
 
   /// Set how many lines can be buffered if the processing is slow.
@@ -252,9 +257,9 @@ mod tests {
   }
 
   #[tokio::test]
-  async fn test_log_proxy_processor() {
+  async fn test_log_proxy_simple() {
     let sink = Sink::stdout().spawn();
-    let proxy = LogProxy::new().processor(|p| p.sink(sink));
+    let proxy = LogProxy::new().simple(|p| p.sink(sink));
     assert_eq!(proxy.buffer_size, 256);
     assert_eq!(proxy.port, 3000);
   }
@@ -278,7 +283,7 @@ mod tests {
     let proxy: LogProxy<()> = LogProxy::new();
     proxy.start().await;
     let sink = Sink::stdout().spawn();
-    let proxy: LogProxy<SimpleProcessor> = LogProxy::new().processor(|p| p.sink(sink.clone()));
+    let proxy: LogProxy<SimpleProcessor> = LogProxy::new().simple(|p| p.sink(sink.clone()));
     proxy.start().await;
   }
 }
