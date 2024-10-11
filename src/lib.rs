@@ -4,7 +4,6 @@ mod processor;
 
 use aws_lambda_runtime_proxy::{LambdaRuntimeApiClient, MockLambdaRuntimeApiServer};
 use chrono::Utc;
-use http::{HeaderMap, HeaderValue};
 use tokio::{
   io::{stdin, AsyncBufReadExt, AsyncRead, BufReader},
   sync::{mpsc, oneshot},
@@ -121,14 +120,13 @@ impl<P> LogProxy<P> {
   {
     debug!(port = %self.port, buffer_size = %self.buffer_size, "Starting log proxy");
 
-    let (checker_tx, next_tx) = spawn_reader(stdin(), self.processor, self.buffer_size);
+    let checker_tx = spawn_reader(stdin(), self.processor, self.buffer_size);
 
     MockLambdaRuntimeApiServer::bind(self.port)
       .await
       .unwrap()
       .serve(move |req| {
         let checker_tx = checker_tx.clone();
-        let next_tx = next_tx.clone();
         async move {
           let is_invocation_next = req.uri().path() == "/2018-06-01/runtime/invocation/next";
 
@@ -154,13 +152,6 @@ impl<P> LogProxy<P> {
             .await
             .unwrap();
 
-          if is_invocation_next {
-            let (ack_tx, ack_rx) = oneshot::channel();
-            next_tx.send((ack_tx, res.headers().clone())).await.unwrap();
-            // wait for the checker to finish
-            ack_rx.await.unwrap();
-          }
-
           Ok(res)
         }
       })
@@ -172,15 +163,11 @@ fn spawn_reader<F: AsyncRead + Send + 'static, P: Processor + 'static>(
   file: F,
   mut processor: P,
   buffer_size: usize,
-) -> (
-  mpsc::Sender<oneshot::Sender<()>>,
-  mpsc::Sender<(oneshot::Sender<()>, HeaderMap<HeaderValue>)>,
-)
+) -> mpsc::Sender<oneshot::Sender<()>>
 where
   BufReader<F>: Unpin,
 {
   let (checker_tx, mut checker_rx) = mpsc::channel::<oneshot::Sender<()>>(1);
-  let (next_tx, mut next_rx) = mpsc::channel::<(oneshot::Sender<()>, HeaderMap<HeaderValue>)>(1);
   let (buffer_tx, mut buffer_rx) = mpsc::channel(buffer_size);
 
   // the reader thread, read from the file then push into the buffer
@@ -217,11 +204,6 @@ where
           // if we are writing to stdout, it is already line-buffered and will flush by line.
           // if we are writing to telemetry log fd, timestamp is appended so we don't need to flush it immediately.
         }
-        next = next_rx.recv() => {
-          let (ack, headers) = next.unwrap();
-          processor.next(headers).await;
-          ack.send(()).unwrap();
-        }
         // the server thread requests to check if the processor has finished processing the logs.
         checker = checker_rx.recv() => {
           // since we are using `biased` select, we don't need to check if there is a message in the buffer,
@@ -240,7 +222,7 @@ where
     }
   });
 
-  (checker_tx, next_tx)
+  checker_tx
 }
 
 #[cfg(test)]

@@ -15,9 +15,8 @@ exclude = ["examples/*", "img/*", "rustfmt.toml", ".gitignore", "CHANGELOG.md"]
 aws-lambda-runtime-proxy = "0.3.0"
 tokio = { version = "1", features = ["io-std", "io-util", "macros"] }
 chrono = "0.4.37"
-http = "1.1.0"
-serde_json = { version = "1.0", optional = true }
 tracing = { version = "0.1", features = ["log"] }
+serde_json = { version = "1.0", optional = true }
 
 [features]
 default = ["emf"]
