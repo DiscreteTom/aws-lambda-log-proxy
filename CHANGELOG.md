@@ -2,11 +2,15 @@
 
 ## v0.4.0
 
-- **_Breaking Change_**: remove `MockProcessor`, use `()` instead.
 - **_Breaking Change_**: `LogProxy::processor` is now `P` instead of `Option<P>`.
 - **_Breaking Change_**: rename `LogProxy::processor` to `LogProxy::simple`, add a new `LogProxy::processor` to support custom processors.
+- **_Breaking Change_**: `Processor::process` now returns `()` instead of a bool.
 - **_Breaking Change_**: remove `Processor::next`. You can register your log proxy process as an external extension to achieve the same effect.
+- **_Breaking Change_**: remove `Processor::flush`.
 - **_Breaking Change_**: change the type of `timestamp` in `Processor::process` to `Timestamp`.
+- **_Breaking Change_**: remove `MockProcessor`, use `()` instead.
+- **_Breaking Change_**: add `SimpleProcessor::new`, prevent users from creating a `SimpleProcessor` directly.
+- **_Breaking Change_**: make `SimpleProcessorBuilder` generic, use `SimpleProcessorBuilder::new` to create a `SimpleProcessorBuilder`, use `SimpleProcessorBuilder::build` to create a `SimpleProcessor`, remove `SimpleProcessorBuilder::ignore/filter`.
 - Feat: add `is_emf` util function.
 - Feat: apply `tracing`.
 

@@ -3,11 +3,9 @@ use crate::Processor;
 
 // the mock processor will discard all logs
 impl Processor for () {
-  async fn process(&mut self, _line: String, _timestamp: Timestamp) -> bool {
-    false
-  }
+  async fn process(&mut self, _line: String, _timestamp: Timestamp) {}
 
-  async fn flush(&mut self) {}
+  async fn truncate(&mut self) {}
 }
 
 #[cfg(test)]
@@ -18,12 +16,10 @@ mod tests {
   #[tokio::test]
   async fn mock_processor() {
     let mut processor = ();
-    assert!(
-      !(processor
-        .process("hello".to_string(), mock_timestamp())
-        .await)
-    );
-    processor.flush().await;
+    processor
+      .process("hello".to_string(), mock_timestamp())
+      .await;
+    processor.truncate().await;
   }
 
   fn mock_timestamp() -> Timestamp {

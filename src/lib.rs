@@ -84,14 +84,14 @@ impl<P> LogProxy<P> {
   /// use aws_lambda_log_proxy::{LogProxy, Sink};
   ///
   /// # async fn t1() {
-  /// LogProxy::new().simple(|p| p.sink(Sink::stdout().spawn()));
+  /// LogProxy::new().simple(|p| p.sink(Sink::stdout().spawn()).build());
   /// # }
   /// ```
   pub fn simple(
     self,
-    builder: impl FnOnce(SimpleProcessorBuilder) -> SimpleProcessor,
+    builder: impl FnOnce(SimpleProcessorBuilder<fn(String) -> Option<String>, ()>) -> SimpleProcessor,
   ) -> LogProxy<SimpleProcessor> {
-    self.processor(builder(SimpleProcessorBuilder::default()))
+    self.processor(builder(SimpleProcessorBuilder::new()))
   }
 
   /// Set how many lines can be buffered if the processing is slow.
@@ -185,8 +185,6 @@ where
 
   // the processor thread
   tokio::spawn(async move {
-    let mut need_flush = false;
-
     loop {
       tokio::select! {
         // enable `biased` to make sure we always try to recv from buffer before accept the server thread checker
@@ -194,20 +192,12 @@ where
 
         res = buffer_rx.recv() => {
           let (line, timestamp) = res.unwrap();
-          need_flush = processor.process(line, timestamp).await || need_flush;
-          // we don't need to flush here.
-          // if we are writing to stdout, it is already line-buffered and will flush by line.
-          // if we are writing to telemetry log fd, timestamp is appended so we don't need to flush it immediately.
+          processor.process(line, timestamp).await;
         }
         // the server thread requests to check if the processor has finished processing the logs.
         checker = checker_rx.recv() => {
           // since we are using `biased` select, we don't need to check if there is a message in the buffer,
           // just stop suppressing the server thread if the branch is executed
-
-          if need_flush {
-            processor.flush().await;
-            need_flush = false;
-          }
 
           processor.truncate().await;
 
@@ -241,7 +231,7 @@ mod tests {
   #[tokio::test]
   async fn test_log_proxy_simple() {
     let sink = Sink::stdout().spawn();
-    let proxy = LogProxy::new().simple(|p| p.sink(sink));
+    let proxy = LogProxy::new().simple(|p| p.sink(sink).build());
     assert_eq!(proxy.buffer_size, 256);
     assert_eq!(proxy.port, 3000);
   }
@@ -265,7 +255,7 @@ mod tests {
     let proxy: LogProxy<()> = LogProxy::new();
     proxy.start().await;
     let sink = Sink::stdout().spawn();
-    let proxy: LogProxy<SimpleProcessor> = LogProxy::new().simple(|p| p.sink(sink.clone()));
+    let proxy: LogProxy<SimpleProcessor> = LogProxy::new().simple(|p| p.sink(sink.clone()).build());
     proxy.start().await;
   }
 }
