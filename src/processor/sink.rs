@@ -148,6 +148,8 @@ enum Action {
 }
 
 /// See [`Sink`].
+///
+/// This is cheap to clone.
 #[derive(Clone)]
 pub struct SinkHandle {
   action_tx: mpsc::Sender<Action>,
