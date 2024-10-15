@@ -6,8 +6,17 @@ use aws_lambda_log_proxy::{LogProxy, Processor, Sink, SinkHandle, Timestamp};
 // SinkHandle is clone-able so our processor is also clone-able.
 #[derive(Clone)]
 pub struct MyProcessor {
-  pub stdout_sink: SinkHandle,
-  pub stderr_sink: SinkHandle,
+  stdout_sink: SinkHandle,
+  stderr_sink: SinkHandle,
+}
+
+impl Default for MyProcessor {
+  fn default() -> Self {
+    Self {
+      stdout_sink: Sink::stdout().spawn(),
+      stderr_sink: Sink::stderr().spawn(),
+    }
+  }
 }
 
 impl Processor for MyProcessor {
@@ -26,10 +35,8 @@ impl Processor for MyProcessor {
 
 #[tokio::main]
 async fn main() {
-  let processor = MyProcessor {
-    stdout_sink: Sink::stdout().spawn(),
-    stderr_sink: Sink::stderr().spawn(),
-  };
-
-  LogProxy::new().processor(processor).start().await;
+  LogProxy::new()
+    .processor(MyProcessor::default())
+    .start()
+    .await;
 }
