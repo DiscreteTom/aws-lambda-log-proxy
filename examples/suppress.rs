@@ -1,5 +1,4 @@
-//! This example demonstrates how to the log proxy can be used
-//! to suppress invocation/next until all the logs are processed.
+//! See ./suppress.README.md for more information.
 
 use aws_lambda_log_proxy::{LogProxy, Processor, Sink, SinkHandle, Timestamp};
 use std::time::Duration;
